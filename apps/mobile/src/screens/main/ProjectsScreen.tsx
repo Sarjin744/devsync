@@ -32,7 +32,8 @@ interface ProjectItem {
   updatedAt: string;
 }
 
-export default function ProjectsScreen() {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export default function ProjectsScreen({ navigation }: { navigation?: any }) {
   const [projects, setProjects] = useState<ProjectItem[]>([]);
   const [teams, setTeams] = useState<TeamOption[]>([]);
   const [statusFilter, setStatusFilter] = useState<'ACTIVE' | 'ARCHIVED'>('ACTIVE');
@@ -177,9 +178,17 @@ export default function ProjectsScreen() {
 
             <View style={styles.cardFooter}>
               <Text style={styles.memberCount}>👥 {item.memberCount} members</Text>
-              <Text style={styles.cardDate}>
-                {new Date(item.updatedAt).toLocaleDateString()}
-              </Text>
+              <TouchableOpacity
+                style={styles.chatButton}
+                onPress={() =>
+                  navigation?.navigate('ProjectChat', {
+                    projectId: item.id,
+                    projectName: item.name,
+                  })
+                }
+              >
+                <Text style={styles.chatButtonText}>💬 Chat</Text>
+              </TouchableOpacity>
             </View>
           </View>
         )}
@@ -464,5 +473,16 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '600',
     fontSize: 13,
+  },
+  chatButton: {
+    backgroundColor: '#ede9fe',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+  },
+  chatButtonText: {
+    color: '#6366f1',
+    fontWeight: '700',
+    fontSize: 11,
   },
 });

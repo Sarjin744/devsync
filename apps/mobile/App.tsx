@@ -17,6 +17,7 @@ import InvitationsScreen from './src/screens/main/InvitationsScreen';
 import ProjectsScreen from './src/screens/main/ProjectsScreen';
 import NotificationsScreen from './src/screens/main/NotificationsScreen';
 import ProfileScreen from './src/screens/main/ProfileScreen';
+import ProjectChatScreen from './src/screens/main/ProjectChatScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -66,6 +67,23 @@ function MainTabs() {
   );
 }
 
+function MainStack() {
+  return (
+    <Stack.Navigator>
+      <Stack.Screen name="MainTabs" component={MainTabs} options={{ headerShown: false }} />
+      <Stack.Screen
+        name="ProjectChat"
+        component={ProjectChatScreen}
+        options={{
+          headerStyle: { backgroundColor: '#fff' },
+          headerTitleStyle: { fontWeight: '700', color: '#111827' },
+          headerShadowVisible: false,
+        }}
+      />
+    </Stack.Navigator>
+  );
+}
+
 function AuthStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
@@ -88,7 +106,7 @@ function AppNavigator() {
 
   return (
     <NavigationContainer>
-      {isAuthenticated ? <MainTabs /> : <AuthStack />}
+      {isAuthenticated ? <MainStack /> : <AuthStack />}
     </NavigationContainer>
   );
 }

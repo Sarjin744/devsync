@@ -1,12 +1,12 @@
 import { Server as SocketServer, Socket } from 'socket.io';
-import { prisma } from '../config/database';
+import { prisma } from '../config/prisma';
 import { logger } from '../utils/logger';
 
 export function registerPresenceHandlers(
   io: SocketServer,
   socket: Socket,
 ): void {
-  // Mark user as online
+  // Mark user as online in database
   const markOnline = async () => {
     try {
       await prisma.user.update({
@@ -19,7 +19,7 @@ export function registerPresenceHandlers(
     }
   };
 
-  // Mark user as offline
+  // Mark user as offline in database
   const markOffline = async () => {
     try {
       await prisma.user.update({

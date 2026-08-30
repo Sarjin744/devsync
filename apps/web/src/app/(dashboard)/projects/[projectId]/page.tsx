@@ -32,6 +32,7 @@ import {
   Clock,
 } from 'lucide-react';
 import Link from 'next/link';
+import { ProjectChat } from '@/components/chat/ProjectChat';
 
 interface ProjectMember {
   id: string;
@@ -878,17 +879,9 @@ export default function ProjectDetailPage({
         </div>
       )}
 
-      {/* ─── TAB 4: CHAT (Placeholder) ──────────────────────────────── */}
+      {/* ─── TAB 4: CHAT ───────────────────────────────────────────── */}
       {activeTab === 'chat' && (
-        <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center max-w-md mx-auto shadow-sm">
-          <div className="w-14 h-14 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <MessageSquare size={24} />
-          </div>
-          <h3 className="font-semibold text-gray-900 text-lg">Real-Time Project Chat</h3>
-          <p className="text-sm text-gray-500 mt-1 mb-4">
-            WebSocket project chat channels and team messaging will be available in Stage 7.
-          </p>
-        </div>
+        <ProjectChat projectId={projectId} members={project.members} />
       )}
 
       {/* ─── TAB 5: FILES (Placeholder) ─────────────────────────────── */}

@@ -439,6 +439,48 @@ When adding members to a project via `POST /api/projects/:projectId/members`, th
 
 ---
 
+## 💬 Real-Time Project Chat & Socket.IO (Stage 7)
+
+### 1. Socket.IO Architecture & Flow
+
+```text
+React / React Native App
+       ↓ (JWT Handshake: auth: { token })
+Socket.IO Connection Middleware (Authentication & User Context)
+       ↓
+Project Room Isolation (project:projectId)
+       ↓
+Message Verification & Rate Limiting (Max 15 msg/5s)
+       ↓
+Prisma ORM & PostgreSQL Persistence
+       ↓
+Broadcast to Project Room (message:new)
+```
+
+### 2. Socket.IO Events
+
+| Direction | Event | Payload | Description |
+|---|---|---|---|
+| Client $\to$ Server | `project:join` | `{ projectId }` | Verifies project membership and joins room |
+| Server $\to$ Client | `project:joined` | `{ projectId }` | Confirms room join |
+| Client $\to$ Server | `project:leave` | `{ projectId }` | Leaves project room |
+| Client $\to$ Server | `message:send` | `{ projectId, content }` | Validates, persists to DB, and broadcasts |
+| Server $\to$ Client | `message:new` | Message Object with Sender | Real-time message broadcast to room |
+| Client $\to$ Server | `typing:start` | `{ projectId }` | Broadcasts typing state to room members |
+| Client $\to$ Server | `typing:stop` | `{ projectId }` | Stops typing state |
+| Server $\to$ Client | `typing:update` | `{ projectId, userId, isTyping }` | Live typing indicator update |
+| Server $\to$ Client | `presence:sync` | `{ projectId, onlineUserIds }` | Online members list for project |
+| Server $\to$ Client | `presence:online` / `presence:offline` | `{ projectId, userId }` | Member presence transitions |
+
+### 3. REST Message Endpoints
+
+| Method | Endpoint | Access | Description |
+|---|---|---|---|
+| `GET` | `/api/projects/:projectId/messages` | Project Member | Get paginated message history |
+| `DELETE` | `/api/messages/:messageId` | Sender / Owner | Delete message |
+
+---
+
 ## 🧪 Testing Suite
 
 Run the full automated test suite using Jest:
@@ -448,7 +490,7 @@ cd server
 npm test
 ```
 
-### Test Coverage (92 Passed Tests)
+### Test Coverage (104 Passed Tests)
 
 - **JWT Utilities (`jwt.test.ts`)**: Access token generation, claims validation, refresh token creation, token tampering rejection, and SHA-256 hash determinism (5 tests).
 - **Password Utilities (`password.test.ts`)**: Bcrypt salt hashing, positive match verification, and negative mismatch rejection (3 tests).
@@ -457,7 +499,8 @@ npm test
 - **User Profile & Search (`user.test.ts`)**: Get profile, update profile, change password with session revocation, and paginated user search (9 tests).
 - **Teams & Invitations (`team.test.ts`)**: Team CRUD, non-member 403 authorization, owner permissions, member role updates, invitation creation, duplicate invitation prevention, and transactional acceptance/rejection (15 tests).
 - **Project Management (`project.test.ts`)**: Project creation, team membership validation, project listing, details, member 403 authorization, owner/lead updates, archive, restore, delete, member additions with parent team enforcement, duplicate prevention, role updates, member removal, and leave project safety (20 tests).
-- **Task Management & Kanban (`task.test.ts`)**: Task creation with defaults, validation errors, assignee project membership enforcement, paginated listings with status/priority filters, single task details, role-based updates, status transitions, authorized deletions, and user assigned tasks (16 tests).
+- **Task Management & Kanban (`task.test.ts`)**: Task creation with defaults, validation errors, assignee project membership enforcement, paginated listings with status/priority filters, single task details, role-based updates, status transitions, authorized deletions, and user assigned tasks (17 tests).
+- **Real-Time Chat & Socket.IO (`chat.test.ts`)**: REST message history, 403 outsider rejection, message deletion, Socket JWT authentication, project room joining, 403 non-member room join rejection, real-time message sending and persistence, empty and oversized validation, critical room isolation verification, and typing indicators (11 tests).
 
 ---
 
