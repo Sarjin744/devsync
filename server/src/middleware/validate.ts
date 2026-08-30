@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { AnyZodObject, ZodError } from 'zod';
+import { ZodSchema, ZodError } from 'zod';
 
 /**
  * Creates a middleware that validates request body, params, and query
@@ -7,9 +7,9 @@ import { AnyZodObject, ZodError } from 'zod';
  * is handled by the global error handler.
  */
 export function validate(schemas: {
-  body?: AnyZodObject;
-  params?: AnyZodObject;
-  query?: AnyZodObject;
+  body?: ZodSchema;
+  params?: ZodSchema;
+  query?: ZodSchema;
 }) {
   return async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
     try {

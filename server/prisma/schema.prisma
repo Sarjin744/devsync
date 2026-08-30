@@ -43,6 +43,14 @@ enum TaskPriority {
   CRITICAL
 }
 
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  EXPIRED
+  CANCELLED
+}
+
 enum NotificationType {
   TASK_ASSIGNED
   TASK_STATUS_CHANGED
@@ -68,18 +76,20 @@ model User {
   updatedAt    DateTime @updatedAt
 
   // Relationships
-  ownedTeams         Team[]          @relation("TeamOwner")
-  teamMemberships    TeamMember[]
-  ownedProjects      Project[]       @relation("ProjectOwner")
-  projectMemberships ProjectMember[]
-  createdTasks       Task[]          @relation("TaskCreator")
-  assignedTasks      Task[]          @relation("TaskAssignee")
-  taskComments       TaskComment[]
-  sentMessages       Message[]       @relation("MessageSender")
-  notifications      Notification[]
-  uploadedFiles      File[]          @relation("FileUploader")
-  activities         Activity[]      @relation("UserActivity")
-  refreshTokens      RefreshToken[]
+  ownedTeams          Team[]           @relation("TeamOwner")
+  teamMemberships     TeamMember[]
+  sentInvitations     TeamInvitation[] @relation("SentInvitations")
+  receivedInvitations TeamInvitation[] @relation("ReceivedInvitations")
+  ownedProjects       Project[]        @relation("ProjectOwner")
+  projectMemberships  ProjectMember[]
+  createdTasks        Task[]           @relation("TaskCreator")
+  assignedTasks       Task[]           @relation("TaskAssignee")
+  taskComments        TaskComment[]
+  sentMessages        Message[]        @relation("MessageSender")
+  notifications       Notification[]
+  uploadedFiles       File[]           @relation("FileUploader")
+  activities          Activity[]       @relation("UserActivity")
+  refreshTokens       RefreshToken[]
 
   @@index([email])
 }
@@ -93,9 +103,10 @@ model Team {
   updatedAt   DateTime @updatedAt
 
   // Relationships
-  owner    User         @relation("TeamOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  members  TeamMember[]
-  projects Project[]
+  owner       User             @relation("TeamOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members     TeamMember[]
+  invitations TeamInvitation[]
+  projects    Project[]
 
   @@index([ownerId])
 }
@@ -114,6 +125,27 @@ model TeamMember {
   @@unique([teamId, userId])
   @@index([teamId])
   @@index([userId])
+}
+
+model TeamInvitation {
+  id            String           @id @default(uuid())
+  teamId        String
+  invitedById   String
+  invitedUserId String
+  role          TeamRole         @default(MEMBER)
+  status        InvitationStatus @default(PENDING)
+  expiresAt     DateTime
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  // Relationships
+  team        Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  invitedBy   User @relation("SentInvitations", fields: [invitedById], references: [id], onDelete: Cascade)
+  invitedUser User @relation("ReceivedInvitations", fields: [invitedUserId], references: [id], onDelete: Cascade)
+
+  @@index([teamId])
+  @@index([invitedUserId])
+  @@index([status])
 }
 
 model Project {

@@ -1,24 +1,34 @@
 import { Router } from 'express';
 import { authenticate } from '../middleware/authenticate';
+import { validate } from '../middleware/validate';
 import {
-  getProfile,
-  updateProfile,
-  uploadAvatar,
-  getUserProjects,
-  getUserTasks,
+  updateProfileSchema,
+  changeUserPasswordSchema,
+  userSearchQuerySchema,
+} from '../validators/user.validator';
+import {
+  getMe,
+  updateMe,
+  changePassword,
   searchUsers,
+  getProfile,
 } from '../controllers/user.controller';
-import { upload } from '../middleware/upload';
 
 const router = Router();
 
+// All user routes require authentication
 router.use(authenticate);
 
-router.get('/search', searchUsers);
+// Profile and Password endpoints for current user
+router.get('/me', getMe);
+router.patch('/me', validate({ body: updateProfileSchema }), updateMe);
+router.put('/me', validate({ body: updateProfileSchema }), updateMe); // Backward compatibility
+router.patch('/me/password', validate({ body: changeUserPasswordSchema }), changePassword);
+
+// User search
+router.get('/search', validate({ query: userSearchQuerySchema }), searchUsers);
+
+// Individual profile by ID
 router.get('/:userId', getProfile);
-router.put('/profile', updateProfile);
-router.post('/avatar', upload.single('avatar'), uploadAvatar);
-router.get('/:userId/projects', getUserProjects);
-router.get('/:userId/tasks', getUserTasks);
 
 export default router;

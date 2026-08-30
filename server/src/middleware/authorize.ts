@@ -1,7 +1,13 @@
-import { Response, NextFunction } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from './authenticate';
-import { ForbiddenError, UnauthorizedError } from '../utils/errors';
-import { ProjectRole, TeamRole } from '@prisma/client';
+import { ForbiddenError, NotFoundError, UnauthorizedError } from '../utils/errors';
+import { ProjectRole, TeamRole, Team, TeamMember } from '@prisma/client';
+import { prisma } from '../config/prisma';
+
+export interface TeamRequest extends AuthenticatedRequest {
+  team: Team;
+  teamMember: TeamMember;
+}
 
 export type AllowedRoles = ProjectRole | TeamRole | 'ANY';
 
@@ -16,10 +22,98 @@ export const PROJECT_ROLE_HIERARCHY: Record<ProjectRole, number> = {
 };
 
 /**
- * Foundation for role-based access control (RBAC).
- * Creates a middleware that checks if the user's role satisfies the required minimum role.
- *
- * @param minimumRole The minimum required role in the hierarchy
+ * Middleware ensuring the authenticated user is an active member of the specified team.
+ * Attaches the verified team and membership records to the request.
+ */
+export async function requireTeamMember(
+  req: Request,
+  _res: Response,
+  next: NextFunction,
+): Promise<void> {
+  const authReq = req as AuthenticatedRequest;
+  if (!authReq.userId) {
+    throw new UnauthorizedError('Authentication required');
+  }
+
+  const teamId = req.params.teamId || req.body?.teamId;
+  if (!teamId) {
+    throw new NotFoundError('Team');
+  }
+
+  const team = await prisma.team.findUnique({
+    where: { id: teamId },
+  });
+
+  if (!team) {
+    throw new NotFoundError('Team');
+  }
+
+  const membership = await prisma.teamMember.findUnique({
+    where: {
+      teamId_userId: {
+        teamId,
+        userId: authReq.userId,
+      },
+    },
+  });
+
+  if (!membership) {
+    throw new ForbiddenError('You are not a member of this team');
+  }
+
+  (req as TeamRequest).team = team;
+  (req as TeamRequest).teamMember = membership;
+
+  next();
+}
+
+/**
+ * Middleware ensuring the authenticated user is the OWNER of the specified team.
+ */
+export async function requireTeamOwner(
+  req: Request,
+  _res: Response,
+  next: NextFunction,
+): Promise<void> {
+  const authReq = req as AuthenticatedRequest;
+  if (!authReq.userId) {
+    throw new UnauthorizedError('Authentication required');
+  }
+
+  const teamId = req.params.teamId || req.body?.teamId;
+  if (!teamId) {
+    throw new NotFoundError('Team');
+  }
+
+  const team = await prisma.team.findUnique({
+    where: { id: teamId },
+  });
+
+  if (!team) {
+    throw new NotFoundError('Team');
+  }
+
+  const membership = await prisma.teamMember.findUnique({
+    where: {
+      teamId_userId: {
+        teamId,
+        userId: authReq.userId,
+      },
+    },
+  });
+
+  if (!membership || membership.role !== TeamRole.OWNER) {
+    throw new ForbiddenError('Only the team owner can perform this action');
+  }
+
+  (req as TeamRequest).team = team;
+  (req as TeamRequest).teamMember = membership;
+
+  next();
+}
+
+/**
+ * Foundation for project role-based access control (RBAC).
  */
 export function requireMinimumProjectRole(minimumRole: ProjectRole) {
   const requiredLevel = PROJECT_ROLE_HIERARCHY[minimumRole];

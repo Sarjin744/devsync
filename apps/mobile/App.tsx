@@ -11,6 +11,8 @@ import RegisterScreen from './src/screens/auth/RegisterScreen';
 
 // Main screens
 import DashboardScreen from './src/screens/main/DashboardScreen';
+import TeamsScreen from './src/screens/main/TeamsScreen';
+import InvitationsScreen from './src/screens/main/InvitationsScreen';
 import ProjectsScreen from './src/screens/main/ProjectsScreen';
 import NotificationsScreen from './src/screens/main/NotificationsScreen';
 import ProfileScreen from './src/screens/main/ProfileScreen';
@@ -21,6 +23,8 @@ const Tab = createBottomTabNavigator();
 function TabIcon({ name, focused }: { name: string; focused: boolean }) {
   const icons: Record<string, string> = {
     Dashboard: '🏠',
+    Teams: '👥',
+    Invites: '✉️',
     Projects: '📁',
     Notifications: '🔔',
     Profile: '👤',
@@ -50,6 +54,8 @@ function MainTabs() {
       })}
     >
       <Tab.Screen name="Dashboard" component={DashboardScreen} />
+      <Tab.Screen name="Teams" component={TeamsScreen} />
+      <Tab.Screen name="Invites" component={InvitationsScreen} />
       <Tab.Screen name="Projects" component={ProjectsScreen} />
       <Tab.Screen name="Notifications" component={NotificationsScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />

@@ -1,7 +1,8 @@
 import { Request, Response } from 'express';
 import { AuthenticatedRequest } from '../middleware/authenticate';
 import * as TeamService from '../services/team.service';
-import { sendSuccess, sendCreated, sendNoContent } from '../utils/response';
+import * as InvitationService from '../services/invitation.service';
+import { sendSuccess, sendCreated } from '../utils/response';
 
 export async function createTeam(req: Request, res: Response): Promise<void> {
   const userId = (req as AuthenticatedRequest).userId;
@@ -30,19 +31,13 @@ export async function updateTeam(req: Request, res: Response): Promise<void> {
 export async function deleteTeam(req: Request, res: Response): Promise<void> {
   const userId = (req as AuthenticatedRequest).userId;
   await TeamService.deleteTeam(req.params.teamId, userId);
-  sendNoContent(res);
+  sendSuccess(res, null, 'Team deleted successfully');
 }
 
-export async function inviteMember(req: Request, res: Response): Promise<void> {
+export async function getTeamMembers(req: Request, res: Response): Promise<void> {
   const userId = (req as AuthenticatedRequest).userId;
-  const member = await TeamService.inviteMember(req.params.teamId, userId, req.body);
-  sendCreated(res, member, 'Member invited successfully');
-}
-
-export async function removeMember(req: Request, res: Response): Promise<void> {
-  const userId = (req as AuthenticatedRequest).userId;
-  await TeamService.removeMember(req.params.teamId, req.params.userId, userId);
-  sendNoContent(res);
+  const members = await TeamService.getTeamMembers(req.params.teamId, userId);
+  sendSuccess(res, members);
 }
 
 export async function updateMemberRole(req: Request, res: Response): Promise<void> {
@@ -53,11 +48,21 @@ export async function updateMemberRole(req: Request, res: Response): Promise<voi
     userId,
     req.body.role,
   );
-  sendSuccess(res, member, 'Role updated');
+  sendSuccess(res, member, 'Member role updated successfully');
 }
 
-export async function leaveTeam(req: Request, res: Response): Promise<void> {
+export async function removeMember(req: Request, res: Response): Promise<void> {
   const userId = (req as AuthenticatedRequest).userId;
-  await TeamService.leaveTeam(req.params.teamId, userId);
-  sendNoContent(res);
+  await TeamService.removeMember(req.params.teamId, req.params.userId, userId);
+  sendSuccess(res, null, 'Member removed successfully');
+}
+
+export async function createTeamInvitation(req: Request, res: Response): Promise<void> {
+  const userId = (req as AuthenticatedRequest).userId;
+  const invitation = await InvitationService.createInvitation(
+    req.params.teamId,
+    userId,
+    req.body,
+  );
+  sendCreated(res, invitation, 'Invitation sent successfully');
 }

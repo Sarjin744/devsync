@@ -125,9 +125,38 @@ export const api = {
   getProjectActivity: (projectId: string) => request(`/api/activity/project/${projectId}`),
 
   // Users
+  getMe: () => request('/api/users/me'),
+  updateMe: (body: { name?: string; bio?: string; profileImage?: string }) =>
+    request('/api/users/me', { method: 'PATCH', body: JSON.stringify(body) }),
+  changePassword: (body: { currentPassword: string; newPassword: string; confirmNewPassword: string }) =>
+    request('/api/users/me/password', { method: 'PATCH', body: JSON.stringify(body) }),
+  searchUsers: (query: string) => request(`/api/users/search?q=${encodeURIComponent(query)}`),
   getProfile: (userId: string) => request(`/api/users/${userId}`),
   updateProfile: (body: { name?: string; bio?: string }) =>
-    request('/api/users/profile', { method: 'PUT', body: JSON.stringify(body) }),
+    request('/api/users/me', { method: 'PATCH', body: JSON.stringify(body) }),
+
+  // Teams
+  getTeams: () => request('/api/teams'),
+  getTeam: (id: string) => request(`/api/teams/${id}`),
+  createTeam: (body: { name: string; description?: string }) =>
+    request('/api/teams', { method: 'POST', body: JSON.stringify(body) }),
+  updateTeam: (id: string, body: { name?: string; description?: string }) =>
+    request(`/api/teams/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteTeam: (id: string) => request(`/api/teams/${id}`, { method: 'DELETE' }),
+
+  // Team Members
+  getTeamMembers: (teamId: string) => request(`/api/teams/${teamId}/members`),
+  updateMemberRole: (teamId: string, userId: string, role: string) =>
+    request(`/api/teams/${teamId}/members/${userId}`, { method: 'PATCH', body: JSON.stringify({ role }) }),
+  removeMember: (teamId: string, userId: string) =>
+    request(`/api/teams/${teamId}/members/${userId}`, { method: 'DELETE' }),
+
+  // Invitations
+  createTeamInvitation: (teamId: string, body: { email?: string; userId?: string; role?: string }) =>
+    request(`/api/teams/${teamId}/invitations`, { method: 'POST', body: JSON.stringify(body) }),
+  getInvitations: () => request('/api/invitations'),
+  acceptInvitation: (id: string) => request(`/api/invitations/${id}/accept`, { method: 'POST' }),
+  rejectInvitation: (id: string) => request(`/api/invitations/${id}/reject`, { method: 'POST' }),
 };
 
 export { STORAGE_KEYS, API_BASE_URL };

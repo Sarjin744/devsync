@@ -9,6 +9,7 @@ import {
   FolderKanban,
   Bell,
   Users,
+  Mail,
   Search,
   Settings,
   LogOut,
@@ -17,9 +18,10 @@ import {
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/teams', label: 'Teams', icon: Users },
+  { href: '/invitations', label: 'Invitations', icon: Mail },
   { href: '/projects', label: 'Projects', icon: FolderKanban },
   { href: '/notifications', label: 'Notifications', icon: Bell },
-  { href: '/teams', label: 'Teams', icon: Users },
   { href: '/search', label: 'Search', icon: Search },
 ];
 

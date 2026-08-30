@@ -328,6 +328,45 @@ Client (Web / Mobile)
 
 ---
 
+## 👥 Users, Teams & Role-Based Access Control (Stage 4)
+
+### 1. User Profile Management & User Search
+* **Profile Management**: Retrieve safe user profiles without sensitive secrets via `GET /api/users/me` and update metadata (`name`, `bio`, `profileImage`) via `PATCH /api/users/me`.
+* **Password Change**: Dedicated `PATCH /api/users/me/password` validating current password against stored bcrypt hash, verifying new password complexity, updating the hash, and revoking existing refresh token sessions.
+* **User Search**: Paginated user search via `GET /api/users/search?q=` supporting case-insensitive lookup by name and email while excluding the searching user and omitting private auth fields.
+
+### 2. Team Management & Membership
+* **Ownership Lifecycle**: Teams are created via `POST /api/teams` where the creator is automatically assigned as the `OWNER`.
+* **Access Control**: Only team members can view team details (`GET /api/teams/:teamId`) and member rosters (`GET /api/teams/:teamId/members`). Non-members receive `403 Forbidden`.
+* **Owner Privileges**: Only the team `OWNER` can edit team details (`PATCH /api/teams/:teamId`), delete the team (`DELETE /api/teams/:teamId`), change member roles (`PATCH /api/teams/:teamId/members/:userId`), or remove members (`DELETE /api/teams/:teamId/members/:userId`).
+
+### 3. Team Invitations Pipeline
+* **Invitation Dispatch**: Team owners invite users by email or userId via `POST /api/teams/:teamId/invitations`. The system prevents self-invitation, duplicate pending invitations, or inviting existing members.
+* **Transactional Acceptance**: Invitee views pending invites via `GET /api/invitations`, and accepts via `POST /api/invitations/:id/accept` (which transactionally adds the user to `TeamMember` and marks the invitation `ACCEPTED`) or rejects via `POST /api/invitations/:id/reject`.
+
+### User & Team Endpoints
+
+| Method | Endpoint | Access | Description |
+|---|---|---|---|
+| `GET` | `/api/users/me` | Bearer Auth | Get authenticated user profile |
+| `PATCH` | `/api/users/me` | Bearer Auth | Update user profile (name, bio, profileImage) |
+| `PATCH` | `/api/users/me/password` | Bearer Auth | Change password & revoke existing sessions |
+| `GET` | `/api/users/search?q=` | Bearer Auth | Paginated user search by name or email |
+| `POST` | `/api/teams` | Bearer Auth | Create team (creator becomes OWNER) |
+| `GET` | `/api/teams` | Bearer Auth | List teams where user is a member |
+| `GET` | `/api/teams/:teamId` | Team Member | Get team details and member list |
+| `PATCH` | `/api/teams/:teamId` | Team Owner | Update team name and description |
+| `DELETE` | `/api/teams/:teamId` | Team Owner | Delete team and cascade memberships |
+| `GET` | `/api/teams/:teamId/members` | Team Member | List team members with roles |
+| `PATCH` | `/api/teams/:teamId/members/:userId` | Team Owner | Update member role (`OWNER`, `MEMBER`) |
+| `DELETE` | `/api/teams/:teamId/members/:userId` | Owner / Self | Remove member from team or leave team |
+| `POST` | `/api/teams/:teamId/invitations` | Team Owner | Send team invitation |
+| `GET` | `/api/invitations` | Bearer Auth | List user's pending invitations |
+| `POST` | `/api/invitations/:id/accept` | Invitee | Accept team invitation & join team |
+| `POST` | `/api/invitations/:id/reject` | Invitee | Reject team invitation |
+
+---
+
 ## 🧪 Testing Suite
 
 Run the full automated test suite using Jest:
@@ -337,17 +376,14 @@ cd server
 npm test
 ```
 
-### Test Coverage (32 Passed Tests)
+### Test Coverage (56 Passed Tests)
 
-- **JWT Utilities (`jwt.test.ts`)**: Access token generation, claims validation, refresh token creation, token tampering rejection, and SHA-256 hash determinism.
-- **Password Utilities (`password.test.ts`)**: Bcrypt salt hashing, positive match verification, and negative mismatch rejection.
-- **Validation Schemas (`validation.test.ts`)**: Zod schema validation for register (name, email, password strength), login, and refresh tokens.
-- **Authentication Flows (`auth.test.ts`)**:
-  - `POST /api/auth/register` (success, duplicate 409, invalid email 400, weak password 400, missing fields 400)
-  - `POST /api/auth/login` (success, incorrect password 401, unknown user 401)
-  - `GET /api/auth/me` (valid token 200, missing token 401, malformed token 401, passwordHash exclusion)
-  - `POST /api/auth/refresh` (token rotation 200, revoked token replay rejection 401, expired token 401)
-  - `POST /api/auth/logout` (session revocation, idempotency)
+- **JWT Utilities (`jwt.test.ts`)**: Access token generation, claims validation, refresh token creation, token tampering rejection, and SHA-256 hash determinism (5 tests).
+- **Password Utilities (`password.test.ts`)**: Bcrypt salt hashing, positive match verification, and negative mismatch rejection (3 tests).
+- **Validation Schemas (`validation.test.ts`)**: Zod schema validation for register (name, email, password strength), login, and refresh tokens (9 tests).
+- **Authentication Flows (`auth.test.ts`)**: Registration, Login, Token Refresh, Session Revocation, and Logout (15 tests).
+- **User Profile & Search (`user.test.ts`)**: Get profile, update profile, change password with session revocation, and paginated user search (9 tests).
+- **Teams & Invitations (`team.test.ts`)**: Team CRUD, non-member 403 authorization, owner permissions, member role updates, invitation creation, duplicate invitation prevention, and transactional acceptance/rejection (15 tests).
 
 ---
 

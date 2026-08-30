@@ -57,6 +57,23 @@ export interface Team {
   updatedAt: string;
 }
 
+export type InvitationStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'EXPIRED' | 'CANCELLED';
+
+export interface TeamInvitation {
+  id: string;
+  teamId: string;
+  invitedById: string;
+  invitedUserId: string;
+  role: TeamRole;
+  status: InvitationStatus;
+  expiresAt: string;
+  createdAt: string;
+  updatedAt: string;
+  team?: Team;
+  invitedBy?: UserPublic;
+  invitedUser?: UserPublic;
+}
+
 export interface TeamMember {
   id: string;
   userId: string;
@@ -64,6 +81,12 @@ export interface TeamMember {
   role: TeamRole;
   user: UserPublic;
   createdAt: string;
+}
+
+export interface TeamDetails extends Team {
+  owner: UserPublic;
+  members: TeamMember[];
+  memberCount: number;
 }
 
 // ============================================================

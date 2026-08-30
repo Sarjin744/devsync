@@ -1,6 +1,7 @@
 import { prisma } from '../config/prisma';
-import { ForbiddenError, NotFoundError, ConflictError } from '../utils/errors';
+import { ForbiddenError, NotFoundError } from '../utils/errors';
 import { TeamRole } from '@prisma/client';
+import type { CreateTeamInput, UpdateTeamInput } from '../validators/team.validator';
 
 const USER_SELECT = {
   id: true,
@@ -15,147 +16,208 @@ const USER_SELECT = {
 
 export async function createTeam(
   userId: string,
-  data: { name: string; description?: string },
+  data: CreateTeamInput,
 ) {
-  const team = await prisma.team.create({
-    data: {
-      name: data.name,
-      description: data.description,
-      ownerId: userId,
-      members: {
-        create: { userId, role: TeamRole.OWNER },
+  const team = await prisma.$transaction(async (tx) => {
+    const newTeam = await tx.team.create({
+      data: {
+        name: data.name.trim(),
+        description: data.description?.trim() || null,
+        ownerId: userId,
       },
-    },
-    include: {
-      members: { include: { user: { select: USER_SELECT } } },
-    },
+    });
+
+    await tx.teamMember.create({
+      data: {
+        teamId: newTeam.id,
+        userId,
+        role: TeamRole.OWNER,
+      },
+    });
+
+    return newTeam;
   });
 
-  return serializeTeam(team);
+  return getTeamById(team.id, userId);
 }
 
 export async function getUserTeams(userId: string) {
-  const teams = await prisma.team.findMany({
-    where: { members: { some: { userId } } },
+  const memberships = await prisma.teamMember.findMany({
+    where: { userId },
     include: {
-      members: { include: { user: { select: USER_SELECT } } },
-      _count: { select: { members: true } },
+      team: {
+        include: {
+          owner: { select: USER_SELECT },
+          _count: { select: { members: true } },
+        },
+      },
     },
+    orderBy: { createdAt: 'desc' },
   });
 
-  return teams.map(serializeTeam);
+  return memberships.map((m) => ({
+    id: m.team.id,
+    name: m.team.name,
+    description: m.team.description,
+    ownerId: m.team.ownerId,
+    role: m.role,
+    owner: {
+      ...m.team.owner,
+      createdAt: m.team.owner.createdAt.toISOString(),
+      updatedAt: m.team.owner.updatedAt.toISOString(),
+    },
+    memberCount: m.team._count.members,
+    createdAt: m.team.createdAt.toISOString(),
+    updatedAt: m.team.updatedAt.toISOString(),
+  }));
 }
 
 export async function getTeamById(teamId: string, userId: string) {
-  const team = await prisma.team.findFirst({
-    where: {
-      id: teamId,
-      members: { some: { userId } },
-    },
+  const team = await prisma.team.findUnique({
+    where: { id: teamId },
     include: {
-      members: { include: { user: { select: USER_SELECT } } },
+      owner: { select: USER_SELECT },
+      members: {
+        include: { user: { select: USER_SELECT } },
+        orderBy: { createdAt: 'asc' },
+      },
+      _count: { select: { members: true } },
     },
   });
 
   if (!team) throw new NotFoundError('Team');
 
-  return serializeTeam(team);
+  const isMember = team.members.some((m) => m.userId === userId);
+  if (!isMember) {
+    throw new ForbiddenError('You are not a member of this team');
+  }
+
+  return {
+    id: team.id,
+    name: team.name,
+    description: team.description,
+    ownerId: team.ownerId,
+    owner: {
+      ...team.owner,
+      createdAt: team.owner.createdAt.toISOString(),
+      updatedAt: team.owner.updatedAt.toISOString(),
+    },
+    members: team.members.map((m) => ({
+      id: m.id,
+      teamId: m.teamId,
+      userId: m.userId,
+      role: m.role,
+      createdAt: m.createdAt.toISOString(),
+      user: {
+        ...m.user,
+        createdAt: m.user.createdAt.toISOString(),
+        updatedAt: m.user.updatedAt.toISOString(),
+      },
+    })),
+    memberCount: team._count.members,
+    createdAt: team.createdAt.toISOString(),
+    updatedAt: team.updatedAt.toISOString(),
+  };
 }
 
 export async function updateTeam(
   teamId: string,
   userId: string,
-  data: { name?: string; description?: string },
+  data: UpdateTeamInput,
 ) {
-  await requireOwner(teamId, userId);
+  const team = await prisma.team.findUnique({ where: { id: teamId } });
+  if (!team) throw new NotFoundError('Team');
 
-  const team = await prisma.team.update({
+  if (team.ownerId !== userId) {
+    throw new ForbiddenError('Only the team owner can update team details');
+  }
+
+  await prisma.team.update({
     where: { id: teamId },
-    data,
-    include: {
-      members: { include: { user: { select: USER_SELECT } } },
+    data: {
+      name: data.name ? data.name.trim() : undefined,
+      description: data.description !== undefined ? data.description : undefined,
     },
   });
 
-  return serializeTeam(team);
+  return getTeamById(teamId, userId);
 }
 
 export async function deleteTeam(teamId: string, userId: string): Promise<void> {
   const team = await prisma.team.findUnique({ where: { id: teamId } });
   if (!team) throw new NotFoundError('Team');
-  if (team.ownerId !== userId) throw new ForbiddenError('Only the team owner can delete the team');
+
+  if (team.ownerId !== userId) {
+    throw new ForbiddenError('Only the team owner can delete the team');
+  }
 
   await prisma.team.delete({ where: { id: teamId } });
 }
 
-export async function inviteMember(
-  teamId: string,
-  inviterId: string,
-  data: { userId: string; role?: TeamRole },
-) {
-  await requireOwner(teamId, inviterId);
-
-  const existing = await prisma.teamMember.findFirst({
-    where: { teamId, userId: data.userId },
+export async function getTeamMembers(teamId: string, userId: string) {
+  // Verify requester is a team member
+  const membership = await prisma.teamMember.findUnique({
+    where: { teamId_userId: { teamId, userId } },
   });
-  if (existing) throw new ConflictError('User is already a team member');
 
-  const member = await prisma.teamMember.create({
-    data: {
-      teamId,
-      userId: data.userId,
-      role: data.role ?? TeamRole.MEMBER,
-    },
+  if (!membership) {
+    throw new ForbiddenError('You are not a member of this team');
+  }
+
+  const members = await prisma.teamMember.findMany({
+    where: { teamId },
     include: { user: { select: USER_SELECT } },
+    orderBy: { createdAt: 'asc' },
   });
 
-  return {
-    ...member,
-    createdAt: member.createdAt.toISOString(),
+  return members.map((m) => ({
+    id: m.id,
+    teamId: m.teamId,
+    userId: m.userId,
+    role: m.role,
+    createdAt: m.createdAt.toISOString(),
     user: {
-      ...member.user,
-      createdAt: member.user.createdAt.toISOString(),
-      updatedAt: member.user.updatedAt.toISOString(),
+      ...m.user,
+      createdAt: m.user.createdAt.toISOString(),
+      updatedAt: m.user.updatedAt.toISOString(),
     },
-  };
-}
-
-export async function removeMember(
-  teamId: string,
-  targetUserId: string,
-  requesterId: string,
-): Promise<void> {
-  await requireOwner(teamId, requesterId);
-
-  const member = await prisma.teamMember.findFirst({
-    where: { teamId, userId: targetUserId },
-  });
-  if (!member) throw new NotFoundError('Team member');
-
-  await prisma.teamMember.delete({ where: { id: member.id } });
+  }));
 }
 
 export async function updateMemberRole(
   teamId: string,
   targetUserId: string,
   requesterId: string,
-  role: TeamRole,
+  newRole: TeamRole,
 ) {
-  await requireOwner(teamId, requesterId);
+  const team = await prisma.team.findUnique({ where: { id: teamId } });
+  if (!team) throw new NotFoundError('Team');
 
-  const member = await prisma.teamMember.findFirst({
-    where: { teamId, userId: targetUserId },
+  if (team.ownerId !== requesterId) {
+    throw new ForbiddenError('Only the team owner can change member roles');
+  }
+
+  if (targetUserId === team.ownerId && newRole !== TeamRole.OWNER) {
+    throw new ForbiddenError('Cannot demote the team owner');
+  }
+
+  const member = await prisma.teamMember.findUnique({
+    where: { teamId_userId: { teamId, userId: targetUserId } },
   });
+
   if (!member) throw new NotFoundError('Team member');
 
   const updated = await prisma.teamMember.update({
     where: { id: member.id },
-    data: { role },
+    data: { role: newRole },
     include: { user: { select: USER_SELECT } },
   });
 
   return {
-    ...updated,
+    id: updated.id,
+    teamId: updated.teamId,
+    userId: updated.userId,
+    role: updated.role,
     createdAt: updated.createdAt.toISOString(),
     user: {
       ...updated.user,
@@ -165,46 +227,31 @@ export async function updateMemberRole(
   };
 }
 
-export async function leaveTeam(teamId: string, userId: string): Promise<void> {
+export async function removeMember(
+  teamId: string,
+  targetUserId: string,
+  requesterId: string,
+): Promise<void> {
   const team = await prisma.team.findUnique({ where: { id: teamId } });
   if (!team) throw new NotFoundError('Team');
-  if (team.ownerId === userId) {
-    throw new ForbiddenError('Owner cannot leave the team. Transfer ownership first.');
+
+  // Allow team owner to remove anyone (except self), or member to remove self (leave)
+  const isOwner = team.ownerId === requesterId;
+  const isSelf = targetUserId === requesterId;
+
+  if (!isOwner && !isSelf) {
+    throw new ForbiddenError('You do not have permission to remove this member');
   }
 
-  const member = await prisma.teamMember.findFirst({ where: { teamId, userId } });
-  if (!member) throw new NotFoundError('Team membership');
+  if (isSelf && isOwner) {
+    throw new ForbiddenError('Team owner cannot leave the team. Delete the team or transfer ownership.');
+  }
+
+  const member = await prisma.teamMember.findUnique({
+    where: { teamId_userId: { teamId, userId: targetUserId } },
+  });
+
+  if (!member) throw new NotFoundError('Team member');
 
   await prisma.teamMember.delete({ where: { id: member.id } });
-}
-
-// ─── Helpers ─────────────────────────────────────────────────
-
-async function requireOwner(teamId: string, userId: string) {
-  const member = await prisma.teamMember.findFirst({
-    where: { teamId, userId, role: TeamRole.OWNER },
-  });
-  if (!member) throw new ForbiddenError('Insufficient team permissions');
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function serializeTeam(team: any) {
-  return {
-    ...team,
-    createdAt: team.createdAt.toISOString(),
-    updatedAt: team.updatedAt.toISOString(),
-    members: team.members?.map((m: {
-      createdAt: Date;
-      user: { createdAt: Date; updatedAt: Date };
-      [key: string]: unknown;
-    }) => ({
-      ...m,
-      createdAt: m.createdAt.toISOString(),
-      user: {
-        ...m.user,
-        createdAt: m.user.createdAt.toISOString(),
-        updatedAt: m.user.updatedAt.toISOString(),
-      },
-    })),
-  };
 }

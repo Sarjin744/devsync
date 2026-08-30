@@ -1,6 +1,7 @@
 import { prisma } from '../config/prisma';
-import { NotFoundError } from '../utils/errors';
-import path from 'path';
+import { NotFoundError, UnauthorizedError } from '../utils/errors';
+import { hashPassword, comparePassword } from '../utils/password';
+import type { UpdateProfileInput } from '../validators/user.validator';
 
 const USER_SELECT = {
   id: true,
@@ -21,22 +22,29 @@ export async function getUserById(userId: string) {
 
   if (!user) throw new NotFoundError('User');
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { passwordHash: _ph, ...safeUser } = user as unknown as {
+    passwordHash?: string;
+    [key: string]: unknown;
+  };
+
   return {
-    ...user,
-    createdAt: user.createdAt.toISOString(),
-    updatedAt: user.updatedAt.toISOString(),
+    ...safeUser,
+    createdAt: (user.createdAt as Date).toISOString(),
+    updatedAt: (user.updatedAt as Date).toISOString(),
   };
 }
 
 export async function updateUserProfile(
   userId: string,
-  data: { name?: string; bio?: string },
+  data: UpdateProfileInput,
 ) {
   const user = await prisma.user.update({
     where: { id: userId },
     data: {
-      name: data.name,
-      bio: data.bio,
+      name: data.name?.trim(),
+      bio: data.bio !== undefined ? data.bio : undefined,
+      profileImage: data.profileImage !== undefined ? data.profileImage : undefined,
     },
     select: USER_SELECT,
   });
@@ -48,95 +56,82 @@ export async function updateUserProfile(
   };
 }
 
-export async function updateAvatar(
+export async function changeUserPassword(
   userId: string,
-  file: Express.Multer.File,
-) {
-  const avatarUrl = `/uploads/${path.basename(file.path)}`;
-
-  const user = await prisma.user.update({
+  currentPassword: string,
+  newPassword: string,
+): Promise<void> {
+  const user = await prisma.user.findUnique({
     where: { id: userId },
-    data: { profileImage: avatarUrl },
-    select: USER_SELECT,
+    select: { passwordHash: true },
   });
+
+  if (!user) throw new NotFoundError('User');
+
+  const isValid = await comparePassword(currentPassword, user.passwordHash);
+  if (!isValid) throw new UnauthorizedError('Current password is incorrect');
+
+  const newHash = await hashPassword(newPassword);
+  await prisma.user.update({
+    where: { id: userId },
+    data: { passwordHash: newHash },
+  });
+
+  // Invalidate all active sessions upon password change
+  await prisma.refreshToken.deleteMany({ where: { userId } });
+}
+
+export async function searchUsers(
+  query: string,
+  excludeUserId: string,
+  page = 1,
+  limit = 20,
+) {
+  const trimmed = query.trim();
+  if (!trimmed) {
+    return {
+      users: [],
+      total: 0,
+      page,
+      limit,
+      totalPages: 0,
+    };
+  }
+
+  const skip = (page - 1) * limit;
+
+  const whereClause = {
+    AND: [
+      { id: { not: excludeUserId } },
+      {
+        OR: [
+          { name: { contains: trimmed, mode: 'insensitive' as const } },
+          { email: { contains: trimmed, mode: 'insensitive' as const } },
+        ],
+      },
+    ],
+  };
+
+  const [users, total] = await Promise.all([
+    prisma.user.findMany({
+      where: whereClause,
+      select: USER_SELECT,
+      skip,
+      take: limit,
+      orderBy: { name: 'asc' },
+    }),
+    prisma.user.count({ where: whereClause }),
+  ]);
 
   return {
-    ...user,
-    createdAt: user.createdAt.toISOString(),
-    updatedAt: user.updatedAt.toISOString(),
+    users: users.map((u) => ({
+      ...u,
+      createdAt: u.createdAt.toISOString(),
+      updatedAt: u.updatedAt.toISOString(),
+    })),
+    total,
+    page,
+    limit,
+    totalPages: Math.ceil(total / limit),
   };
-}
-
-export async function getUserProjects(userId: string) {
-  const memberships = await prisma.projectMember.findMany({
-    where: { userId },
-    include: {
-      project: {
-        select: {
-          id: true,
-          name: true,
-          description: true,
-          teamId: true,
-          status: true,
-          ownerId: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-      },
-    },
-  });
-
-  return memberships.map((m) => ({
-    ...m.project,
-    role: m.role,
-    createdAt: m.project.createdAt.toISOString(),
-    updatedAt: m.project.updatedAt.toISOString(),
-  }));
-}
-
-export async function getUserTasks(userId: string) {
-  const tasks = await prisma.task.findMany({
-    where: { assigneeId: userId },
-    include: {
-      assignee: { select: USER_SELECT },
-      creator: { select: USER_SELECT },
-      _count: { select: { comments: true } },
-    },
-    orderBy: { updatedAt: 'desc' },
-  });
-
-  return tasks.map((t) => ({
-    ...t,
-    commentCount: t._count.comments,
-    _count: undefined,
-    createdAt: t.createdAt.toISOString(),
-    updatedAt: t.updatedAt.toISOString(),
-    dueDate: t.dueDate?.toISOString() ?? null,
-  }));
-}
-
-export async function searchUsers(query: string, excludeUserId: string) {
-  if (!query || query.trim().length < 2) return [];
-
-  const users = await prisma.user.findMany({
-    where: {
-      AND: [
-        { id: { not: excludeUserId } },
-        {
-          OR: [
-            { name: { contains: query, mode: 'insensitive' } },
-            { email: { contains: query, mode: 'insensitive' } },
-          ],
-        },
-      ],
-    },
-    select: USER_SELECT,
-    take: 20,
-  });
-
-  return users.map((u) => ({
-    ...u,
-    createdAt: u.createdAt.toISOString(),
-    updatedAt: u.updatedAt.toISOString(),
-  }));
 }
