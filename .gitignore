@@ -62,6 +62,9 @@ expo-env.d.ts
 android/
 ios/
 
+# Local database data
+.pgdata/
+
 # Uploads (local development)
 uploads/
 
