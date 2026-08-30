@@ -594,6 +594,40 @@ Paginated Standard JSON Response
 
 ---
 
+## 📊 Dashboard, Analytics & Project Insights (Stage 11)
+
+### 1. Analytics & Insights Architecture
+
+```text
+Client (Web Dashboard / Project Insights / Mobile Dashboard)
+       ↓ Authenticated Request
+Authorization Engine (Strict Project Member & User Scoping)
+       ↓ PostgreSQL Indexed Queries (Grouping & Filtering)
+Metrics Aggregator & Health Scorer (Configurable Constants)
+       ↓
+Structured JSON Payload (Health, Task/Priority Distributions, Workload, Productivity)
+```
+
+* **Global Dashboard (`/dashboard`)**: Aggregated metrics across all projects the user is authorized to access (total projects, open tasks, completed tasks, overdue tasks, project health overview, recent activity).
+* **Project Dashboard (`/projects/:projectId/dashboard`)**: In-depth analytics for a single project including:
+  * **Deterministic Project Health**: Scored and categorized as `HEALTHY`, `AT_RISK`, or `CRITICAL` based on overdue task thresholds and completion velocity.
+  * **Task & Priority Distribution**: Visual representation of `TODO`, `IN_PROGRESS`, `IN_REVIEW`, and `DONE` stages alongside priority breakdown (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`).
+  * **Team Workload Breakdown**: Transparent task distribution per member (open, completed, and overdue metrics).
+  * **Productivity Trends**: Daily completed task counts over `7d`, `30d`, and `90d` timeframes.
+  * **Upcoming Deadlines**: Ranked view of imminent deliverables.
+* **Mobile Dashboard Screen**: Lightweight mobile overview with stat cards, health status badges, project summaries, and pull-to-refresh capabilities.
+
+### 2. REST Dashboard Endpoints
+
+| Method | Endpoint | Access | Description |
+|---|---|---|---|
+| `GET` | `/api/dashboard/overview` | Authenticated User | Global statistics, project summaries with health indicators, and recent activity |
+| `GET` | `/api/projects/:projectId/dashboard` | Project Member | Project task distribution, completion rate, overdue metrics, health score, and upcoming deadlines |
+| `GET` | `/api/projects/:projectId/dashboard/workload` | Project Member | Task allocation and completion metrics per project member |
+| `GET` | `/api/projects/:projectId/dashboard/productivity?range=7d\|30d\|90d` | Project Member | Daily completed task counts over configurable time intervals |
+
+---
+
 ## 🧪 Testing Suite
 
 Run the full automated test suite using Jest:
@@ -603,7 +637,7 @@ cd server
 npm test
 ```
 
-### Test Coverage (148 Passed Tests)
+### Test Coverage (154 Passed Tests)
 
 - **JWT Utilities (`jwt.test.ts`)**: Access token generation, claims validation, refresh token creation, token tampering rejection, and SHA-256 hash determinism (5 tests).
 - **Password Utilities (`password.test.ts`)**: Bcrypt salt hashing, positive match verification, and negative mismatch rejection (3 tests).
@@ -618,6 +652,7 @@ npm test
 - **Project Activity Feed (`activity.test.ts`)**: Activity feed pagination, filtering by action type, non-member 403 authorization, and structured event metadata (5 tests).
 - **File Management & Cloud Storage (`file.test.ts`)**: Multipart file uploads, project membership validation, 400 empty validation, 403 outsider rejection, paginated file listings, single file details, short-lived signed download redirects, role-based file renaming (owner/lead/uploader vs viewer 403), role-based file deletion (storage cleanup + DB record deletion), and cross-project security isolation (16 tests).
 - **Global Search & Discovery (`search.test.ts`)**: Input normalization, min/max length validation, query trimming, individual entity filters (`projects`, `tasks`, `messages`, `files`, `activity`, `users`), global multi-entity aggregation, project-specific search scoping, 403 outsider rejection on unauthorized projects, and mandatory cross-project data leakage prevention (14 tests).
+- **Dashboard & Project Insights (`dashboard.test.ts`)**: Global metrics aggregation, backward-compatible overview endpoint, project task and priority distributions, completion rate calculation, health score and threshold rules, team member workload partitioning (open, completed, overdue), productivity trend generation across date ranges (`7d`, `30d`, `90d`), and 403 outsider rejection on unauthorized project dashboards (6 tests).
 
 ---
 

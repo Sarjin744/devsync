@@ -96,6 +96,11 @@ export const api = {
 
   // Dashboard
   getDashboard: () => request('/api/dashboard'),
+  getDashboardOverview: () => request('/api/dashboard/overview'),
+  getProjectDashboard: (projectId: string) => request(`/api/projects/${projectId}/dashboard`),
+  getProjectWorkload: (projectId: string) => request(`/api/projects/${projectId}/dashboard/workload`),
+  getProjectProductivity: (projectId: string, range = '30d') =>
+    request(`/api/projects/${projectId}/dashboard/productivity?range=${range}`),
 
   // Projects
   getProjects: (params?: { teamId?: string; status?: string }) => {

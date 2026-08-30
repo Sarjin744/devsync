@@ -30,6 +30,11 @@ import { createTaskSchema } from '../validators/task.validator';
 import { getMessages } from '../controllers/message.controller';
 import { getProjectActivity } from '../controllers/activity.controller';
 import { uploadFile, getFiles } from '../controllers/file.controller';
+import {
+  getProjectDashboard,
+  getProjectWorkload,
+  getProjectProductivity,
+} from '../controllers/dashboard.controller';
 import { upload } from '../middleware/upload';
 
 const router = Router();
@@ -48,6 +53,11 @@ router.patch('/:projectId/archive', archiveProject); // Compatibility
 router.post('/:projectId/restore', restoreProject);
 router.delete('/:projectId', deleteProject);
 router.post('/:projectId/leave', leaveProject);
+
+// Project Dashboard & Analytics
+router.get('/:projectId/dashboard', getProjectDashboard);
+router.get('/:projectId/dashboard/workload', getProjectWorkload);
+router.get('/:projectId/dashboard/productivity', getProjectProductivity);
 
 // Project Files
 router.get('/:projectId/files', getFiles);

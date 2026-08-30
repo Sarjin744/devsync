@@ -30,6 +30,7 @@ import {
   Plus,
   AlertTriangle,
   Clock,
+  TrendingUp,
 } from 'lucide-react';
 import Link from 'next/link';
 import { ProjectChat } from '@/components/chat/ProjectChat';
@@ -560,6 +561,12 @@ export default function ProjectDetailPage({
               <Icon size={14} /> {label}
             </button>
           ))}
+          <Link
+            href={`/projects/${projectId}/dashboard`}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold text-indigo-600 hover:bg-indigo-50 transition whitespace-nowrap border border-indigo-100 ml-auto"
+          >
+            <TrendingUp size={14} /> Analytics & Insights
+          </Link>
         </div>
       </div>
 

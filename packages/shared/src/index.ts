@@ -381,3 +381,102 @@ export interface SearchQuery {
   page?: number;
   limit?: number;
 }
+
+// ============================================================
+// Dashboard & Analytics types
+// ============================================================
+
+export type ProjectHealthStatus = 'HEALTHY' | 'AT_RISK' | 'CRITICAL';
+
+export interface ProjectHealth {
+  status: ProjectHealthStatus;
+  label: string;
+  score: number;
+  reasons: string[];
+}
+
+export interface TaskDistribution {
+  todo: number;
+  inProgress: number;
+  inReview: number;
+  done: number;
+  total: number;
+  completionRate: number;
+}
+
+export interface PriorityDistribution {
+  low: number;
+  medium: number;
+  high: number;
+  urgent: number;
+}
+
+export interface MemberWorkload {
+  userId: string;
+  name: string;
+  email: string;
+  profileImage?: string | null;
+  role: string;
+  openTasks: number;
+  completedTasks: number;
+  overdueTasks: number;
+  totalAssigned: number;
+}
+
+export interface ProductivityPoint {
+  date: string;
+  completedCount: number;
+}
+
+export interface ProjectDashboardData {
+  project: {
+    id: string;
+    name: string;
+    description?: string | null;
+    status: string;
+  };
+  tasks: {
+    total: number;
+    open: number;
+    todo: number;
+    inProgress: number;
+    inReview: number;
+    done: number;
+    completionRate: number;
+    overdue: number;
+    priorityDistribution: PriorityDistribution;
+  };
+  health: ProjectHealth;
+  upcomingDeadlines: Array<{
+    id: string;
+    title: string;
+    dueDate: string;
+    priority: string;
+    status: string;
+    assigneeName?: string | null;
+  }>;
+  recentActivity: Activity[];
+}
+
+export interface DashboardOverviewData {
+  projects: number;
+  openTasks: number;
+  completedTasks: number;
+  overdueTasks: number;
+  upcomingTasks: number;
+  projectSummaries: Array<{
+    id: string;
+    name: string;
+    description?: string | null;
+    status: string;
+    totalTasks: number;
+    openTasks: number;
+    completedTasks: number;
+    overdueTasks: number;
+    completionRate: number;
+    memberCount: number;
+    health: ProjectHealth;
+  }>;
+  recentActivity: Activity[];
+  recentNotifications: Notification[];
+}
