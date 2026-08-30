@@ -1,0 +1,61 @@
+# Render Infrastructure-as-Code Blueprint
+# Deploy PostgreSQL, Backend API, and Next.js Web Frontend in 1-Click
+
+services:
+  # ─── 1. Backend Web Service ─────────────────────────────────
+  - type: web
+    name: devsync-api
+    runtime: node
+    rootDir: server
+    buildCommand: npm install && npx prisma generate && npm run build
+    startCommand: npx prisma migrate deploy && node dist/index.js
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: devsync-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: CLIENT_URL
+        fromService:
+          type: web
+          name: devsync-web
+          property: host
+          transform: https://{host}
+      - key: STORAGE_PROVIDER
+        value: local
+
+  # ─── 2. Next.js Web Frontend ────────────────────────────────
+  - type: web
+    name: devsync-web
+    runtime: node
+    rootDir: apps/web
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    plan: free
+    envVars:
+      - key: NEXT_PUBLIC_API_URL
+        fromService:
+          type: web
+          name: devsync-api
+          property: host
+          transform: https://{host}
+      - key: NEXT_PUBLIC_SOCKET_URL
+        fromService:
+          type: web
+          name: devsync-api
+          property: host
+          transform: https://{host}
+
+# ─── 3. PostgreSQL Database ──────────────────────────────────
+databases:
+  - name: devsync-db
+    databaseName: devsync
+    user: devsync_user
+    plan: free
