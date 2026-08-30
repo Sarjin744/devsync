@@ -345,3 +345,39 @@ export interface SocketEvents {
   'file:updated': ProjectFile;
   'file:deleted': { fileId: string; projectId: string };
 }
+
+// ============================================================
+// Search types
+// ============================================================
+
+export type SearchResultType = 'PROJECT' | 'TASK' | 'USER' | 'MESSAGE' | 'FILE' | 'ACTIVITY';
+
+export interface SearchResultItem {
+  id: string;
+  type: SearchResultType;
+  title: string;
+  description?: string | null;
+  snippet?: string | null;
+  project?: {
+    id: string;
+    name: string;
+  } | null;
+  metadata?: Record<string, unknown> | null;
+  url: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface SearchData {
+  query: string;
+  results: SearchResultItem[];
+  pagination: PaginationMeta;
+}
+
+export interface SearchQuery {
+  q: string;
+  type?: 'all' | 'projects' | 'tasks' | 'users' | 'messages' | 'files' | 'activity';
+  projectId?: string;
+  page?: number;
+  limit?: number;
+}

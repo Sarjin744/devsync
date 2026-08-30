@@ -30,7 +30,7 @@ const navItems = [
   { href: '/search', label: 'Search', icon: Search },
 ];
 
-export function Sidebar() {
+export function Sidebar({ onOpenSearch }: { onOpenSearch?: () => void }) {
   const pathname = usePathname();
   const { user, logout } = useAuth();
 
@@ -59,6 +59,23 @@ export function Sidebar() {
         <NotificationBell />
       </div>
 
+      {/* Quick Search Trigger */}
+      <div className="p-3 pb-0">
+        <button
+          type="button"
+          onClick={onOpenSearch}
+          className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 hover:bg-gray-100/80 border border-gray-200/70 rounded-xl text-xs font-medium text-gray-500 transition group cursor-pointer"
+        >
+          <span className="flex items-center gap-2">
+            <Search size={14} className="text-gray-400 group-hover:text-indigo-600 transition" />
+            <span>Search DevSync...</span>
+          </span>
+          <kbd className="px-1.5 py-0.5 bg-white border border-gray-200 rounded text-[10px] font-bold text-gray-400 shadow-2xs">
+            Ctrl+K
+          </kbd>
+        </button>
+      </div>
+
       {/* Navigation */}
       <nav className="flex-1 p-3">
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-3 mb-2">
@@ -66,7 +83,7 @@ export function Sidebar() {
         </p>
         <ul className="space-y-0.5">
           {navItems.map(({ href, label, icon: Icon }) => {
-            const isActive = pathname === href || pathname.startsWith(`${href}/`);
+            const isActive = pathname === href || (href !== '/' && pathname.startsWith(`${href}/`));
             const isNotifications = href === '/notifications';
 
             return (
@@ -76,7 +93,7 @@ export function Sidebar() {
                   className={cn(
                     'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all group',
                     isActive
-                      ? 'bg-indigo-50 text-indigo-700'
+                      ? 'bg-indigo-50 text-indigo-700 font-semibold'
                       : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
                   )}
                 >
@@ -105,7 +122,7 @@ export function Sidebar() {
         </ul>
       </nav>
 
-      {/* User */}
+      {/* User Profile & Sign Out */}
       <div className="p-3 border-t border-gray-100">
         <Link href="/profile" className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition group">
           <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs font-semibold flex-shrink-0">

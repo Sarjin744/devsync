@@ -18,6 +18,8 @@ import ProjectsScreen from './src/screens/main/ProjectsScreen';
 import NotificationsScreen from './src/screens/main/NotificationsScreen';
 import ProfileScreen from './src/screens/main/ProfileScreen';
 import ProjectChatScreen from './src/screens/main/ProjectChatScreen';
+import ProjectFilesScreen from './src/screens/main/ProjectFilesScreen';
+import SearchScreen from './src/screens/main/SearchScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -25,6 +27,7 @@ const Tab = createBottomTabNavigator();
 function TabIcon({ name, focused }: { name: string; focused: boolean }) {
   const icons: Record<string, string> = {
     Dashboard: '🏠',
+    Search: '🔍',
     Tasks: '📋',
     Projects: '📁',
     Teams: '👥',
@@ -57,6 +60,7 @@ function MainTabs() {
       })}
     >
       <Tab.Screen name="Dashboard" component={DashboardScreen} />
+      <Tab.Screen name="Search" component={SearchScreen} />
       <Tab.Screen name="Tasks" component={TasksScreen} />
       <Tab.Screen name="Projects" component={ProjectsScreen} />
       <Tab.Screen name="Teams" component={TeamsScreen} />
@@ -74,6 +78,15 @@ function MainStack() {
       <Stack.Screen
         name="ProjectChat"
         component={ProjectChatScreen}
+        options={{
+          headerStyle: { backgroundColor: '#fff' },
+          headerTitleStyle: { fontWeight: '700', color: '#111827' },
+          headerShadowVisible: false,
+        }}
+      />
+      <Stack.Screen
+        name="ProjectFiles"
+        component={ProjectFilesScreen}
         options={{
           headerStyle: { backgroundColor: '#fff' },
           headerTitleStyle: { fontWeight: '700', color: '#111827' },

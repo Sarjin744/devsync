@@ -155,6 +155,17 @@ export const api = {
   renameProjectFile: (fileId: string, originalName: string) =>
     request(`/api/files/${fileId}`, { method: 'PATCH', body: JSON.stringify({ originalName }) }),
 
+  // Search
+  search: (query: string, params?: { type?: string; projectId?: string; page?: number; limit?: number }) => {
+    const qParams = new URLSearchParams();
+    qParams.append('q', query);
+    if (params?.type) qParams.append('type', params.type);
+    if (params?.projectId) qParams.append('projectId', params.projectId);
+    if (params?.page) qParams.append('page', String(params.page));
+    if (params?.limit) qParams.append('limit', String(params.limit));
+    return request(`/api/search?${qParams.toString()}`);
+  },
+
   // Activity
   getProjectActivity: (projectId: string) => request(`/api/activity/project/${projectId}`),
 

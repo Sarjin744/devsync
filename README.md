@@ -566,6 +566,34 @@ Socket.IO Broadcast (`file:new`, `file:updated`, `file:deleted` to `project:{id}
 
 ---
 
+## 🔍 Global Search & Advanced Discovery (Stage 10)
+
+### 1. Search Architecture & Scope
+
+```text
+Client (Web Command Palette / Mobile Search Screen)
+       ↓ Debounced GET /api/search?q=...&type=...&projectId=...
+Authentication & Rate Limiting (60 requests/min)
+       ↓ Authorization Engine (Resolves user's accessible Project & Team IDs)
+PostgreSQL Query Concurrency (Projects, Tasks, Messages, Files, Activity, Teammates)
+       ↓ Relevance Scoring (Exact Match > Prefix Match > Content Match > Recency)
+Paginated Standard JSON Response
+```
+
+* **Authorized Multi-Entity Search**: Indexes and retrieves matching `PROJECT`, `TASK`, `USER`, `MESSAGE`, `FILE`, and `ACTIVITY` items without exposing cross-project data.
+* **Strict Server-Side Isolation**: Outsiders never discover projects, tasks, messages, files, or activities outside their explicit memberships.
+* **User Privacy Enforcement**: Only returns users who share at least one active team or project with the requesting user.
+* **Command Palette UX (`Ctrl + K` / `Cmd + K`)**: Modal command palette with debounced search, category pills, keyboard navigation (Arrow Up/Down, Enter, Esc), and local recent search history.
+* **Mobile Discovery Screen**: Fast search screen with recent searches, type filters, and direct tab navigation.
+
+### 2. REST Search Endpoints
+
+| Method | Endpoint | Access | Description |
+|---|---|---|---|
+| `GET` | `/api/search?q=...&type=...&projectId=...` | Authenticated User | Unified multi-entity search with relevance scoring, filtering, and pagination |
+
+---
+
 ## 🧪 Testing Suite
 
 Run the full automated test suite using Jest:
@@ -575,7 +603,7 @@ cd server
 npm test
 ```
 
-### Test Coverage (134 Passed Tests)
+### Test Coverage (148 Passed Tests)
 
 - **JWT Utilities (`jwt.test.ts`)**: Access token generation, claims validation, refresh token creation, token tampering rejection, and SHA-256 hash determinism (5 tests).
 - **Password Utilities (`password.test.ts`)**: Bcrypt salt hashing, positive match verification, and negative mismatch rejection (3 tests).
@@ -589,6 +617,7 @@ npm test
 - **Notifications & Preferences (`notification.test.ts`)**: User notification preferences GET/PATCH, paginated notifications list, unread counts, mark read, mark all read, delete, user isolation (403), scheduled due-soon task checks, and overdue task checks with deduplication (9 tests).
 - **Project Activity Feed (`activity.test.ts`)**: Activity feed pagination, filtering by action type, non-member 403 authorization, and structured event metadata (5 tests).
 - **File Management & Cloud Storage (`file.test.ts`)**: Multipart file uploads, project membership validation, 400 empty validation, 403 outsider rejection, paginated file listings, single file details, short-lived signed download redirects, role-based file renaming (owner/lead/uploader vs viewer 403), role-based file deletion (storage cleanup + DB record deletion), and cross-project security isolation (16 tests).
+- **Global Search & Discovery (`search.test.ts`)**: Input normalization, min/max length validation, query trimming, individual entity filters (`projects`, `tasks`, `messages`, `files`, `activity`, `users`), global multi-entity aggregation, project-specific search scoping, 403 outsider rejection on unauthorized projects, and mandatory cross-project data leakage prevention (14 tests).
 
 ---
 
