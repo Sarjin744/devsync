@@ -1,12 +1,17 @@
 import { Request, Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from './authenticate';
 import { ForbiddenError, NotFoundError, UnauthorizedError } from '../utils/errors';
-import { ProjectRole, TeamRole, Team, TeamMember } from '@prisma/client';
+import { ProjectRole, TeamRole, Team, TeamMember, Project, ProjectMember } from '@prisma/client';
 import { prisma } from '../config/prisma';
 
 export interface TeamRequest extends AuthenticatedRequest {
   team: Team;
   teamMember: TeamMember;
+}
+
+export interface ProjectRequest extends AuthenticatedRequest {
+  project: Project;
+  projectMember: ProjectMember;
 }
 
 export type AllowedRoles = ProjectRole | TeamRole | 'ANY';
@@ -23,7 +28,6 @@ export const PROJECT_ROLE_HIERARCHY: Record<ProjectRole, number> = {
 
 /**
  * Middleware ensuring the authenticated user is an active member of the specified team.
- * Attaches the verified team and membership records to the request.
  */
 export async function requireTeamMember(
   req: Request,
@@ -113,35 +117,113 @@ export async function requireTeamOwner(
 }
 
 /**
- * Foundation for project role-based access control (RBAC).
+ * Middleware ensuring the authenticated user is a member of the specified project.
  */
-export function requireMinimumProjectRole(minimumRole: ProjectRole) {
+export async function requireProjectMember(
+  req: Request,
+  _res: Response,
+  next: NextFunction,
+): Promise<void> {
+  const authReq = req as AuthenticatedRequest;
+  if (!authReq.userId) {
+    throw new UnauthorizedError('Authentication required');
+  }
+
+  const projectId = req.params.projectId || req.body?.projectId;
+  if (!projectId) {
+    throw new NotFoundError('Project');
+  }
+
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+  });
+
+  if (!project) {
+    throw new NotFoundError('Project');
+  }
+
+  const membership = await prisma.projectMember.findUnique({
+    where: {
+      projectId_userId: {
+        projectId,
+        userId: authReq.userId,
+      },
+    },
+  });
+
+  if (!membership && project.ownerId !== authReq.userId) {
+    throw new ForbiddenError('You are not a member of this project');
+  }
+
+  (req as ProjectRequest).project = project;
+  if (membership) {
+    (req as ProjectRequest).projectMember = membership;
+  }
+
+  next();
+}
+
+/**
+ * Middleware ensuring the user has at least the specified minimum project role.
+ */
+export function requireProjectRole(minimumRole: ProjectRole) {
   const requiredLevel = PROJECT_ROLE_HIERARCHY[minimumRole];
 
-  return (
-    req: AuthenticatedRequest,
-    _res: Response,
-    next: NextFunction,
-    userRole?: ProjectRole,
-  ): void => {
-    if (!req.userId) {
+  return async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
+    const authReq = req as AuthenticatedRequest;
+    if (!authReq.userId) {
       throw new UnauthorizedError('Authentication required');
     }
 
-    if (!userRole) {
-      throw new ForbiddenError('No project role assigned');
+    const projectId = req.params.projectId || req.body?.projectId;
+    if (!projectId) {
+      throw new NotFoundError('Project');
     }
 
-    const userLevel = PROJECT_ROLE_HIERARCHY[userRole] ?? 0;
-    if (userLevel < requiredLevel) {
-      throw new ForbiddenError(
-        `Requires at least ${minimumRole} role. Current role: ${userRole}`,
-      );
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+    });
+
+    if (!project) {
+      throw new NotFoundError('Project');
     }
+
+    // Owner always has maximum level
+    if (project.ownerId === authReq.userId) {
+      (req as ProjectRequest).project = project;
+      next();
+      return;
+    }
+
+    const membership = await prisma.projectMember.findUnique({
+      where: {
+        projectId_userId: {
+          projectId,
+          userId: authReq.userId,
+        },
+      },
+    });
+
+    if (!membership) {
+      throw new ForbiddenError('You are not a member of this project');
+    }
+
+    const userLevel = PROJECT_ROLE_HIERARCHY[membership.role] ?? 0;
+    if (userLevel < requiredLevel) {
+      throw new ForbiddenError(`This action requires at least ${minimumRole} role`);
+    }
+
+    (req as ProjectRequest).project = project;
+    (req as ProjectRequest).projectMember = membership;
 
     next();
   };
 }
+
+/**
+ * Middleware ensuring the user is the project OWNER.
+ */
+export const requireProjectOwner = requireProjectRole(ProjectRole.OWNER);
 
 /**
  * Helper to check if a specific role is permitted among a list of allowed roles.

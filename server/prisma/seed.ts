@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, ProjectRole, ProjectStatus } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
@@ -51,9 +51,18 @@ async function main() {
     },
   });
 
-  console.info(`✅ Created 3 seed users: ${alex.email}, ${sarah.email}, ${marcus.email}`);
+  const elena = await prisma.user.create({
+    data: {
+      name: 'Elena Rostova',
+      email: 'elena.qa@devsync.local',
+      passwordHash: defaultPasswordHash,
+      bio: 'QA Engineer & Test Automation Lead',
+    },
+  });
 
-  // 2. Create sample development team
+  console.info(`✅ Created 4 seed users: ${alex.email}, ${sarah.email}, ${marcus.email}, ${elena.email}`);
+
+  // 2. Create multiple sample development teams
   const engineeringTeam = await prisma.team.create({
     data: {
       name: 'Core Platform Engineering',
@@ -64,34 +73,84 @@ async function main() {
           { userId: alex.id, role: 'OWNER' },
           { userId: sarah.id, role: 'MEMBER' },
           { userId: marcus.id, role: 'MEMBER' },
+          { userId: elena.id, role: 'MEMBER' },
         ],
       },
     },
   });
 
-  console.info(`✅ Created seed team: "${engineeringTeam.name}"`);
+  const designTeam = await prisma.team.create({
+    data: {
+      name: 'Product Design & UX',
+      description: 'User experience research, prototyping, and UI design system team',
+      ownerId: sarah.id,
+      members: {
+        create: [
+          { userId: sarah.id, role: 'OWNER' },
+          { userId: marcus.id, role: 'MEMBER' },
+          { userId: alex.id, role: 'MEMBER' },
+        ],
+      },
+    },
+  });
 
-  // 3. Create sample project
+  console.info(`✅ Created 2 seed teams: "${engineeringTeam.name}", "${designTeam.name}"`);
+
+  // 3. Create multiple projects (Active & Archived) with diverse roles
   const devsyncProject = await prisma.project.create({
     data: {
       name: 'DevSync Platform MVP',
       description: 'Real-time team collaboration platform with Kanban and WebSocket messaging',
       teamId: engineeringTeam.id,
       ownerId: alex.id,
-      status: 'ACTIVE',
+      status: ProjectStatus.ACTIVE,
       members: {
         create: [
-          { userId: alex.id, role: 'OWNER' },
-          { userId: sarah.id, role: 'TEAM_LEAD' },
-          { userId: marcus.id, role: 'DEVELOPER' },
+          { userId: alex.id, role: ProjectRole.OWNER },
+          { userId: sarah.id, role: ProjectRole.TEAM_LEAD },
+          { userId: marcus.id, role: ProjectRole.DEVELOPER },
+          { userId: elena.id, role: ProjectRole.VIEWER },
         ],
       },
     },
   });
 
-  console.info(`✅ Created seed project: "${devsyncProject.name}"`);
+  const designSystemProject = await prisma.project.create({
+    data: {
+      name: 'DevSync Design System 2.0',
+      description: 'Unified cross-platform design token system and component library',
+      teamId: designTeam.id,
+      ownerId: sarah.id,
+      status: ProjectStatus.ACTIVE,
+      members: {
+        create: [
+          { userId: sarah.id, role: ProjectRole.OWNER },
+          { userId: marcus.id, role: ProjectRole.DEVELOPER },
+          { userId: alex.id, role: ProjectRole.VIEWER },
+        ],
+      },
+    },
+  });
 
-  // 4. Create sample tasks
+  const legacyProject = await prisma.project.create({
+    data: {
+      name: 'Legacy Monolith Migration',
+      description: 'Decommissioning v1 backend services and database table schemas',
+      teamId: engineeringTeam.id,
+      ownerId: alex.id,
+      status: ProjectStatus.ARCHIVED,
+      members: {
+        create: [
+          { userId: alex.id, role: ProjectRole.OWNER },
+          { userId: sarah.id, role: ProjectRole.TEAM_LEAD },
+        ],
+      },
+    },
+  });
+
+  console.info(`✅ Created 3 seed projects: "${devsyncProject.name}", "${designSystemProject.name}", "${legacyProject.name}" (Archived)`);
+
+  // 4. Create sample tasks for MVP project
   const task1 = await prisma.task.create({
     data: {
       title: 'Design System & UI Color Tokens',
@@ -144,9 +203,9 @@ async function main() {
     },
   });
 
-  console.info('✅ Created 4 sample development tasks');
+  console.info('✅ Created sample development tasks');
 
-  // 5. Create task comments
+  // 5. Create sample task comments
   await prisma.taskComment.create({
     data: {
       taskId: task1.id,

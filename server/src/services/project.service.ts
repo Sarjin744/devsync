@@ -1,8 +1,7 @@
 import { prisma } from '../config/prisma';
 import { ForbiddenError, NotFoundError, ConflictError } from '../utils/errors';
-import { createActivity } from './activity.service';
-import { createNotification } from './notification.service';
-import { ProjectRole } from '@prisma/client';
+import { ProjectRole, ProjectStatus } from '@prisma/client';
+import type { CreateProjectInput, UpdateProjectInput, ProjectQueryInput } from '../validators/project.validator';
 
 const USER_SELECT = {
   id: true,
@@ -15,82 +14,131 @@ const USER_SELECT = {
   updatedAt: true,
 } as const;
 
-const PROJECT_SELECT = {
-  id: true,
-  name: true,
-  description: true,
-  teamId: true,
-  status: true,
-  ownerId: true,
-  createdAt: true,
-  updatedAt: true,
-} as const;
-
 export async function createProject(
   userId: string,
-  data: { name: string; description?: string; teamId?: string },
+  data: CreateProjectInput,
 ) {
-  const project = await prisma.project.create({
-    data: {
-      name: data.name,
-      description: data.description,
-      teamId: data.teamId ?? null,
-      ownerId: userId,
-      members: {
-        create: { userId, role: ProjectRole.OWNER },
+  // If teamId is specified, verify user belongs to the team
+  if (data.teamId) {
+    const teamMembership = await prisma.teamMember.findUnique({
+      where: {
+        teamId_userId: {
+          teamId: data.teamId,
+          userId,
+        },
       },
-    },
-    select: PROJECT_SELECT,
+    });
+
+    if (!teamMembership) {
+      throw new ForbiddenError('You must belong to the team to create a project under it');
+    }
+  }
+
+  const project = await prisma.$transaction(async (tx) => {
+    const newProject = await tx.project.create({
+      data: {
+        name: data.name.trim(),
+        description: data.description?.trim() || null,
+        teamId: data.teamId || null,
+        ownerId: userId,
+        status: ProjectStatus.ACTIVE,
+      },
+    });
+
+    await tx.projectMember.create({
+      data: {
+        projectId: newProject.id,
+        userId,
+        role: ProjectRole.OWNER,
+      },
+    });
+
+    return newProject;
   });
 
-  await createActivity({
-    action: 'PROJECT_CREATED',
-    description: `Project "${project.name}" was created`,
-    projectId: project.id,
-    userId,
-  });
-
-  return serializeProject(project);
+  return getProjectById(project.id, userId);
 }
 
-export async function getUserProjects(userId: string) {
-  const memberships = await prisma.projectMember.findMany({
-    where: { userId },
+export async function getUserProjects(
+  userId: string,
+  filters?: ProjectQueryInput,
+) {
+  const whereClause: {
+    members: { some: { userId: string } };
+    teamId?: string;
+    status?: ProjectStatus;
+  } = {
+    members: { some: { userId } },
+  };
+
+  if (filters?.teamId) {
+    whereClause.teamId = filters.teamId;
+  }
+
+  if (filters?.status) {
+    whereClause.status = filters.status;
+  }
+
+  const projects = await prisma.project.findMany({
+    where: whereClause,
     include: {
-      project: {
+      owner: { select: USER_SELECT },
+      team: { select: { id: true, name: true } },
+      members: {
+        where: { userId },
+        select: { role: true },
+      },
+      _count: {
         select: {
-          ...PROJECT_SELECT,
-          _count: {
-            select: {
-              tasks: true,
-              members: true,
-            },
-          },
+          members: true,
+          tasks: true,
         },
       },
     },
-    orderBy: { createdAt: 'desc' },
+    orderBy: { updatedAt: 'desc' },
   });
 
-  return memberships.map((m) => ({
-    ...serializeProject(m.project),
-    role: m.role,
+  return projects.map((p) => ({
+    id: p.id,
+    name: p.name,
+    description: p.description,
+    teamId: p.teamId,
+    team: p.team,
+    status: p.status,
+    ownerId: p.ownerId,
+    role: p.members[0]?.role || ProjectRole.VIEWER,
+    owner: {
+      ...p.owner,
+      createdAt: p.owner.createdAt.toISOString(),
+      updatedAt: p.owner.updatedAt.toISOString(),
+    },
+    memberCount: p._count.members,
+    taskCount: p._count.tasks,
+    createdAt: p.createdAt.toISOString(),
+    updatedAt: p.updatedAt.toISOString(),
   }));
 }
 
 export async function getProjectById(projectId: string, userId: string) {
-  await requireProjectMember(projectId, userId);
-
   const project = await prisma.project.findUnique({
     where: { id: projectId },
     include: {
+      owner: { select: USER_SELECT },
+      team: {
+        select: {
+          id: true,
+          name: true,
+          description: true,
+        },
+      },
       members: {
         include: { user: { select: USER_SELECT } },
+        orderBy: { createdAt: 'asc' },
       },
       _count: {
         select: {
-          tasks: true,
           members: true,
+          tasks: true,
         },
       },
     },
@@ -98,33 +146,32 @@ export async function getProjectById(projectId: string, userId: string) {
 
   if (!project) throw new NotFoundError('Project');
 
-  // Count tasks by status
-  const taskCounts = await prisma.task.groupBy({
-    by: ['status'],
-    where: { projectId },
-    _count: true,
-  });
+  const userMembership = project.members.find((m) => m.userId === userId);
+  const isOwner = project.ownerId === userId;
 
-  const counts = {
-    total: 0,
-    todo: 0,
-    inProgress: 0,
-    inReview: 0,
-    done: 0,
-  };
-
-  taskCounts.forEach((tc) => {
-    counts.total += tc._count;
-    if (tc.status === 'TODO') counts.todo = tc._count;
-    if (tc.status === 'IN_PROGRESS') counts.inProgress = tc._count;
-    if (tc.status === 'IN_REVIEW') counts.inReview = tc._count;
-    if (tc.status === 'DONE') counts.done = tc._count;
-  });
+  if (!userMembership && !isOwner) {
+    throw new ForbiddenError('You do not have permission to view this project');
+  }
 
   return {
-    ...serializeProject(project),
+    id: project.id,
+    name: project.name,
+    description: project.description,
+    teamId: project.teamId,
+    team: project.team,
+    status: project.status,
+    ownerId: project.ownerId,
+    role: userMembership?.role || (isOwner ? ProjectRole.OWNER : ProjectRole.VIEWER),
+    owner: {
+      ...project.owner,
+      createdAt: project.owner.createdAt.toISOString(),
+      updatedAt: project.owner.updatedAt.toISOString(),
+    },
     members: project.members.map((m) => ({
-      ...m,
+      id: m.id,
+      projectId: m.projectId,
+      userId: m.userId,
+      role: m.role,
       createdAt: m.createdAt.toISOString(),
       user: {
         ...m.user,
@@ -132,168 +179,158 @@ export async function getProjectById(projectId: string, userId: string) {
         updatedAt: m.user.updatedAt.toISOString(),
       },
     })),
-    taskCounts: counts,
+    memberCount: project._count.members,
+    taskCount: project._count.tasks,
+    createdAt: project.createdAt.toISOString(),
+    updatedAt: project.updatedAt.toISOString(),
   };
 }
 
 export async function updateProject(
   projectId: string,
   userId: string,
-  data: { name?: string; description?: string },
+  data: UpdateProjectInput,
 ) {
-  await requireOwnerOrLead(projectId, userId);
-
-  const project = await prisma.project.update({
+  const project = await prisma.project.findUnique({
     where: { id: projectId },
-    data,
-    select: PROJECT_SELECT,
+    include: { members: true },
   });
 
-  await createActivity({
-    action: 'PROJECT_UPDATED',
-    description: `Project "${project.name}" was updated`,
-    projectId,
-    userId,
+  if (!project) throw new NotFoundError('Project');
+
+  const member = project.members.find((m) => m.userId === userId);
+  const isOwner = project.ownerId === userId || member?.role === ProjectRole.OWNER;
+  const isLead = member?.role === ProjectRole.TEAM_LEAD;
+
+  if (!isOwner && !isLead) {
+    throw new ForbiddenError('Only the project owner or team lead can update project details');
+  }
+
+  await prisma.project.update({
+    where: { id: projectId },
+    data: {
+      name: data.name !== undefined ? data.name.trim() : undefined,
+      description: data.description !== undefined ? data.description : undefined,
+      status: data.status !== undefined ? data.status : undefined,
+    },
   });
 
-  return serializeProject(project);
+  return getProjectById(projectId, userId);
 }
 
 export async function archiveProject(projectId: string, userId: string) {
-  await requireOwner(projectId, userId);
-
-  const project = await prisma.project.update({
+  const project = await prisma.project.findUnique({
     where: { id: projectId },
-    data: { status: 'ARCHIVED' },
-    select: PROJECT_SELECT,
+    include: { members: true },
   });
 
-  return serializeProject(project);
+  if (!project) throw new NotFoundError('Project');
+
+  const member = project.members.find((m) => m.userId === userId);
+  const isOwner = project.ownerId === userId || member?.role === ProjectRole.OWNER;
+  const isLead = member?.role === ProjectRole.TEAM_LEAD;
+
+  if (!isOwner && !isLead) {
+    throw new ForbiddenError('Only the project owner or team lead can archive the project');
+  }
+
+  await prisma.project.update({
+    where: { id: projectId },
+    data: { status: ProjectStatus.ARCHIVED },
+  });
+
+  return getProjectById(projectId, userId);
+}
+
+export async function restoreProject(projectId: string, userId: string) {
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    include: { members: true },
+  });
+
+  if (!project) throw new NotFoundError('Project');
+
+  const member = project.members.find((m) => m.userId === userId);
+  const isOwner = project.ownerId === userId || member?.role === ProjectRole.OWNER;
+
+  if (!isOwner) {
+    throw new ForbiddenError('Only the project owner can restore an archived project');
+  }
+
+  await prisma.project.update({
+    where: { id: projectId },
+    data: { status: ProjectStatus.ACTIVE },
+  });
+
+  return getProjectById(projectId, userId);
 }
 
 export async function deleteProject(projectId: string, userId: string): Promise<void> {
-  await requireOwner(projectId, userId);
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    include: { members: true },
+  });
+
+  if (!project) throw new NotFoundError('Project');
+
+  const member = project.members.find((m) => m.userId === userId);
+  const isOwner = project.ownerId === userId || member?.role === ProjectRole.OWNER;
+
+  if (!isOwner) {
+    throw new ForbiddenError('Only the project owner can permanently delete the project');
+  }
+
   await prisma.project.delete({ where: { id: projectId } });
 }
 
-export async function addMember(
-  projectId: string,
-  requesterId: string,
-  data: { userId: string; role?: ProjectRole },
-) {
-  await requireOwnerOrLead(projectId, requesterId);
-
-  const existing = await prisma.projectMember.findFirst({
-    where: { projectId, userId: data.userId },
-  });
-  if (existing) throw new ConflictError('User is already a project member');
-
-  const member = await prisma.projectMember.create({
-    data: {
-      projectId,
-      userId: data.userId,
-      role: data.role ?? ProjectRole.DEVELOPER,
-    },
-    include: { user: { select: USER_SELECT } },
-  });
-
+export async function leaveProject(projectId: string, userId: string): Promise<void> {
   const project = await prisma.project.findUnique({
     where: { id: projectId },
-    select: { name: true },
   });
 
-  await createActivity({
-    action: 'MEMBER_ADDED',
-    description: `A new member was added to "${project?.name}"`,
-    projectId,
-    userId: requesterId,
-  });
+  if (!project) throw new NotFoundError('Project');
 
-  await createNotification({
-    type: 'PROJECT_MEMBER_ADDED',
-    title: 'Project Invitation',
-    message: `You were added to the project "${project?.name}"`,
-    userId: data.userId,
-  });
+  if (project.ownerId === userId) {
+    throw new ForbiddenError('Project owner cannot leave the project. Transfer ownership or delete the project.');
+  }
 
-  return {
-    ...member,
-    createdAt: member.createdAt.toISOString(),
-    user: {
-      ...member.user,
-      createdAt: member.user.createdAt.toISOString(),
-      updatedAt: member.user.updatedAt.toISOString(),
+  const membership = await prisma.projectMember.findUnique({
+    where: {
+      projectId_userId: { projectId, userId },
     },
-  };
-}
-
-export async function removeMember(
-  projectId: string,
-  targetUserId: string,
-  requesterId: string,
-): Promise<void> {
-  await requireOwnerOrLead(projectId, requesterId);
-
-  const member = await prisma.projectMember.findFirst({
-    where: { projectId, userId: targetUserId },
-  });
-  if (!member) throw new NotFoundError('Project member');
-
-  await prisma.projectMember.delete({ where: { id: member.id } });
-
-  const project = await prisma.project.findUnique({
-    where: { id: projectId },
-    select: { name: true },
   });
 
-  await createActivity({
-    action: 'MEMBER_REMOVED',
-    description: `A member was removed from "${project?.name}"`,
-    projectId,
-    userId: requesterId,
-  });
-}
+  if (!membership) {
+    throw new NotFoundError('Project membership');
+  }
 
-export async function updateMemberRole(
-  projectId: string,
-  targetUserId: string,
-  requesterId: string,
-  role: ProjectRole,
-) {
-  await requireOwnerOrLead(projectId, requesterId);
-
-  const member = await prisma.projectMember.findFirst({
-    where: { projectId, userId: targetUserId },
-  });
-  if (!member) throw new NotFoundError('Project member');
-
-  const updated = await prisma.projectMember.update({
-    where: { id: member.id },
-    data: { role },
-    include: { user: { select: USER_SELECT } },
-  });
-
-  return {
-    ...updated,
-    createdAt: updated.createdAt.toISOString(),
-    user: {
-      ...updated.user,
-      createdAt: updated.user.createdAt.toISOString(),
-      updatedAt: updated.user.updatedAt.toISOString(),
-    },
-  };
+  await prisma.projectMember.delete({ where: { id: membership.id } });
 }
 
 export async function getProjectMembers(projectId: string, userId: string) {
-  await requireProjectMember(projectId, userId);
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    include: { members: true },
+  });
+
+  if (!project) throw new NotFoundError('Project');
+
+  const isMember = project.members.some((m) => m.userId === userId);
+  if (!isMember && project.ownerId !== userId) {
+    throw new ForbiddenError('You are not a member of this project');
+  }
 
   const members = await prisma.projectMember.findMany({
     where: { projectId },
     include: { user: { select: USER_SELECT } },
+    orderBy: { createdAt: 'asc' },
   });
 
   return members.map((m) => ({
-    ...m,
+    id: m.id,
+    projectId: m.projectId,
+    userId: m.userId,
+    role: m.role,
     createdAt: m.createdAt.toISOString(),
     user: {
       ...m.user,
@@ -303,37 +340,162 @@ export async function getProjectMembers(projectId: string, userId: string) {
   }));
 }
 
-// ─── Helpers ─────────────────────────────────────────────────
+export async function addProjectMember(
+  projectId: string,
+  requesterId: string,
+  data: { userId: string; role?: ProjectRole },
+) {
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    include: { members: true },
+  });
+
+  if (!project) throw new NotFoundError('Project');
+
+  const requesterMember = project.members.find((m) => m.userId === requesterId);
+  const isOwner = project.ownerId === requesterId || requesterMember?.role === ProjectRole.OWNER;
+  const isLead = requesterMember?.role === ProjectRole.TEAM_LEAD;
+
+  if (!isOwner && !isLead) {
+    throw new ForbiddenError('Only project owner or team lead can add members');
+  }
+
+  // If project has parent team, verify target user belongs to parent team
+  if (project.teamId) {
+    const isTeamMember = await prisma.teamMember.findUnique({
+      where: {
+        teamId_userId: {
+          teamId: project.teamId,
+          userId: data.userId,
+        },
+      },
+    });
+
+    if (!isTeamMember) {
+      throw new ForbiddenError('User must belong to the parent team to be added to this project');
+    }
+  }
+
+  // Check if already a project member
+  const existing = project.members.find((m) => m.userId === data.userId);
+  if (existing) {
+    throw new ConflictError('User is already a member of this project');
+  }
+
+  const newMember = await prisma.projectMember.create({
+    data: {
+      projectId,
+      userId: data.userId,
+      role: data.role ?? ProjectRole.DEVELOPER,
+    },
+    include: { user: { select: USER_SELECT } },
+  });
+
+  return {
+    id: newMember.id,
+    projectId: newMember.projectId,
+    userId: newMember.userId,
+    role: newMember.role,
+    createdAt: newMember.createdAt.toISOString(),
+    user: {
+      ...newMember.user,
+      createdAt: newMember.user.createdAt.toISOString(),
+      updatedAt: newMember.user.updatedAt.toISOString(),
+    },
+  };
+}
+
+export async function updateProjectMemberRole(
+  projectId: string,
+  targetUserId: string,
+  requesterId: string,
+  role: ProjectRole,
+) {
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    include: { members: true },
+  });
+
+  if (!project) throw new NotFoundError('Project');
+
+  const requesterMember = project.members.find((m) => m.userId === requesterId);
+  const isOwner = project.ownerId === requesterId || requesterMember?.role === ProjectRole.OWNER;
+
+  if (!isOwner) {
+    throw new ForbiddenError('Only the project owner can change member roles');
+  }
+
+  if (targetUserId === project.ownerId && role !== ProjectRole.OWNER) {
+    throw new ForbiddenError('Cannot demote the project owner');
+  }
+
+  const member = project.members.find((m) => m.userId === targetUserId);
+  if (!member) throw new NotFoundError('Project member');
+
+  const updated = await prisma.projectMember.update({
+    where: { id: member.id },
+    data: { role },
+    include: { user: { select: USER_SELECT } },
+  });
+
+  return {
+    id: updated.id,
+    projectId: updated.projectId,
+    userId: updated.userId,
+    role: updated.role,
+    createdAt: updated.createdAt.toISOString(),
+    user: {
+      ...updated.user,
+      createdAt: updated.user.createdAt.toISOString(),
+      updatedAt: updated.user.updatedAt.toISOString(),
+    },
+  };
+}
+
+export async function removeProjectMember(
+  projectId: string,
+  targetUserId: string,
+  requesterId: string,
+): Promise<void> {
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    include: { members: true },
+  });
+
+  if (!project) throw new NotFoundError('Project');
+
+  const requesterMember = project.members.find((m) => m.userId === requesterId);
+  const isOwner = project.ownerId === requesterId || requesterMember?.role === ProjectRole.OWNER;
+  const isLead = requesterMember?.role === ProjectRole.TEAM_LEAD;
+  const isSelf = targetUserId === requesterId;
+
+  if (!isOwner && !isLead && !isSelf) {
+    throw new ForbiddenError('You do not have permission to remove this member');
+  }
+
+  if (targetUserId === project.ownerId) {
+    throw new ForbiddenError('Cannot remove the project owner from the project');
+  }
+
+  const member = project.members.find((m) => m.userId === targetUserId);
+  if (!member) throw new NotFoundError('Project member');
+
+  await prisma.projectMember.delete({ where: { id: member.id } });
+}
 
 export async function requireProjectMember(
   projectId: string,
   userId: string,
 ): Promise<void> {
-  const member = await prisma.projectMember.findFirst({
-    where: { projectId, userId },
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    include: { members: true },
   });
-  if (!member) throw new ForbiddenError('You are not a member of this project');
-}
 
-async function requireOwnerOrLead(projectId: string, userId: string) {
-  const member = await prisma.projectMember.findFirst({
-    where: { projectId, userId, role: { in: [ProjectRole.OWNER, ProjectRole.TEAM_LEAD] } },
-  });
-  if (!member) throw new ForbiddenError('Insufficient project permissions');
-}
+  if (!project) throw new NotFoundError('Project');
 
-async function requireOwner(projectId: string, userId: string) {
-  const member = await prisma.projectMember.findFirst({
-    where: { projectId, userId, role: ProjectRole.OWNER },
-  });
-  if (!member) throw new ForbiddenError('Only the project owner can perform this action');
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function serializeProject(project: any) {
-  return {
-    ...project,
-    createdAt: project.createdAt.toISOString(),
-    updatedAt: project.updatedAt.toISOString(),
-  };
+  const isMember = project.members.some((m) => m.userId === userId);
+  if (!isMember && project.ownerId !== userId) {
+    throw new ForbiddenError('You are not a member of this project');
+  }
 }

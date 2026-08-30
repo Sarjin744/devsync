@@ -1,33 +1,49 @@
 import { Router } from 'express';
 import { authenticate } from '../middleware/authenticate';
+import { validate } from '../middleware/validate';
+import {
+  createProjectSchema,
+  updateProjectSchema,
+  addProjectMemberSchema,
+  updateProjectMemberRoleSchema,
+} from '../validators/project.validator';
 import {
   createProject,
   getProjects,
   getProject,
   updateProject,
   archiveProject,
+  restoreProject,
   deleteProject,
-  addMember,
-  removeMember,
-  updateMemberRole,
+  leaveProject,
   getProjectMembers,
+  addProjectMember,
+  updateProjectMemberRole,
+  removeProjectMember,
 } from '../controllers/project.controller';
 
 const router = Router();
 
+// All project routes require authentication
 router.use(authenticate);
 
-router.post('/', createProject);
+// Project CRUD & Lifecycle
+router.post('/', validate({ body: createProjectSchema }), createProject);
 router.get('/', getProjects);
 router.get('/:projectId', getProject);
-router.put('/:projectId', updateProject);
-router.patch('/:projectId/archive', archiveProject);
+router.patch('/:projectId', validate({ body: updateProjectSchema }), updateProject);
+router.put('/:projectId', validate({ body: updateProjectSchema }), updateProject); // Compatibility
+router.post('/:projectId/archive', archiveProject);
+router.patch('/:projectId/archive', archiveProject); // Compatibility
+router.post('/:projectId/restore', restoreProject);
 router.delete('/:projectId', deleteProject);
+router.post('/:projectId/leave', leaveProject);
 
-// Members
+// Project Members
 router.get('/:projectId/members', getProjectMembers);
-router.post('/:projectId/members', addMember);
-router.delete('/:projectId/members/:userId', removeMember);
-router.put('/:projectId/members/:userId/role', updateMemberRole);
+router.post('/:projectId/members', validate({ body: addProjectMemberSchema }), addProjectMember);
+router.patch('/:projectId/members/:userId', validate({ body: updateProjectMemberRoleSchema }), updateProjectMemberRole);
+router.put('/:projectId/members/:userId/role', validate({ body: updateProjectMemberRoleSchema }), updateProjectMemberRole); // Compatibility
+router.delete('/:projectId/members/:userId', removeProjectMember);
 
 export default router;

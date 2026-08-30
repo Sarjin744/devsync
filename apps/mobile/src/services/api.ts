@@ -98,10 +98,31 @@ export const api = {
   getDashboard: () => request('/api/dashboard'),
 
   // Projects
-  getProjects: () => request('/api/projects'),
+  getProjects: (params?: { teamId?: string; status?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.teamId) query.append('teamId', params.teamId);
+    if (params?.status) query.append('status', params.status);
+    const queryString = query.toString();
+    return request(`/api/projects${queryString ? `?${queryString}` : ''}`);
+  },
   getProject: (id: string) => request(`/api/projects/${id}`),
-  createProject: (body: { name: string; description?: string }) =>
+  createProject: (body: { name: string; description?: string; teamId?: string }) =>
     request('/api/projects', { method: 'POST', body: JSON.stringify(body) }),
+  updateProject: (id: string, body: { name?: string; description?: string }) =>
+    request(`/api/projects/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  archiveProject: (id: string) => request(`/api/projects/${id}/archive`, { method: 'POST' }),
+  restoreProject: (id: string) => request(`/api/projects/${id}/restore`, { method: 'POST' }),
+  deleteProject: (id: string) => request(`/api/projects/${id}`, { method: 'DELETE' }),
+  leaveProject: (id: string) => request(`/api/projects/${id}/leave`, { method: 'POST' }),
+
+  // Project Members
+  getProjectMembers: (projectId: string) => request(`/api/projects/${projectId}/members`),
+  addProjectMember: (projectId: string, body: { userId: string; role?: string }) =>
+    request(`/api/projects/${projectId}/members`, { method: 'POST', body: JSON.stringify(body) }),
+  updateProjectMemberRole: (projectId: string, userId: string, role: string) =>
+    request(`/api/projects/${projectId}/members/${userId}`, { method: 'PATCH', body: JSON.stringify({ role }) }),
+  removeProjectMember: (projectId: string, userId: string) =>
+    request(`/api/projects/${projectId}/members/${userId}`, { method: 'DELETE' }),
 
   // Tasks
   getTasks: (projectId: string) => request(`/api/tasks?projectId=${projectId}`),

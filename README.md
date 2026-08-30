@@ -367,6 +367,47 @@ Client (Web / Mobile)
 
 ---
 
+## 📁 Project Management (Stage 5)
+
+### 1. Project Lifecycle & Ownership
+* **Project Creation**: Projects are created via `POST /api/projects`. If a `teamId` is specified, the user must be a member of the parent team. The creator is transactionally assigned as the project `OWNER` in `ProjectMember`.
+* **Project Listing & Filtering**: `GET /api/projects` returns projects accessible to the authenticated user with support for filtering by `status` (`ACTIVE`, `ARCHIVED`) and `teamId`.
+* **Project Details**: `GET /api/projects/:projectId` provides deep project metadata, owner details, member counts, and full member rosters with roles. Non-members receive `403 Forbidden`.
+* **Lifecycle Transitions**:
+  * `PATCH /api/projects/:projectId`: Allows project `OWNER` or `TEAM_LEAD` to modify project name and description.
+  * `POST /api/projects/:projectId/archive`: Marks project as `ARCHIVED` (retains read-only access for authorized members).
+  * `POST /api/projects/:projectId/restore`: Restores archived project to `ACTIVE` (OWNER only).
+  * `DELETE /api/projects/:projectId`: Permanently deletes project and cascades project memberships safely without deleting users or teams (OWNER only).
+  * `POST /api/projects/:projectId/leave`: Allows members to leave a project. The `OWNER` cannot leave without transferring ownership first.
+
+### 2. Project Member Roles & Permissions
+* **`OWNER`**: Full project control, modify settings, assign/change member roles, archive, restore, delete project.
+* **`TEAM_LEAD`**: Update project details, manage members, archive project.
+* **`DEVELOPER`**: View project, participate in future tasks, comment, and chat.
+* **`VIEWER`**: Read-only access to permitted project information.
+
+### 3. Parent Team Enforcement
+When adding members to a project via `POST /api/projects/:projectId/members`, the user being added must already belong to the project's parent `Team`. Duplicate memberships are prevented with `409 Conflict`.
+
+### Project Endpoints
+
+| Method | Endpoint | Access | Description |
+|---|---|---|---|
+| `POST` | `/api/projects` | Team Member | Create project under team (creator becomes `OWNER`) |
+| `GET` | `/api/projects` | Bearer Auth | List user's projects with `status` & `teamId` filters |
+| `GET` | `/api/projects/:projectId` | Project Member | Get project details, owner, team, and member list |
+| `PATCH` | `/api/projects/:projectId` | Owner / Lead | Update project name and description |
+| `POST` | `/api/projects/:projectId/archive` | Owner / Lead | Archive project |
+| `POST` | `/api/projects/:projectId/restore` | Project Owner | Restore project to active |
+| `DELETE` | `/api/projects/:projectId` | Project Owner | Delete project permanently |
+| `POST` | `/api/projects/:projectId/leave` | Member (Non-Owner) | Leave project |
+| `GET` | `/api/projects/:projectId/members` | Project Member | List all project members with roles |
+| `POST` | `/api/projects/:projectId/members` | Owner / Lead | Add member from parent team to project |
+| `PATCH` | `/api/projects/:projectId/members/:userId` | Project Owner | Update member role (`OWNER`, `TEAM_LEAD`, `DEVELOPER`, `VIEWER`) |
+| `DELETE` | `/api/projects/:projectId/members/:userId` | Owner / Lead | Remove member from project |
+
+---
+
 ## 🧪 Testing Suite
 
 Run the full automated test suite using Jest:
@@ -376,7 +417,7 @@ cd server
 npm test
 ```
 
-### Test Coverage (56 Passed Tests)
+### Test Coverage (76 Passed Tests)
 
 - **JWT Utilities (`jwt.test.ts`)**: Access token generation, claims validation, refresh token creation, token tampering rejection, and SHA-256 hash determinism (5 tests).
 - **Password Utilities (`password.test.ts`)**: Bcrypt salt hashing, positive match verification, and negative mismatch rejection (3 tests).
@@ -384,6 +425,7 @@ npm test
 - **Authentication Flows (`auth.test.ts`)**: Registration, Login, Token Refresh, Session Revocation, and Logout (15 tests).
 - **User Profile & Search (`user.test.ts`)**: Get profile, update profile, change password with session revocation, and paginated user search (9 tests).
 - **Teams & Invitations (`team.test.ts`)**: Team CRUD, non-member 403 authorization, owner permissions, member role updates, invitation creation, duplicate invitation prevention, and transactional acceptance/rejection (15 tests).
+- **Project Management (`project.test.ts`)**: Project creation, team membership validation, project listing, details, member 403 authorization, owner/lead updates, archive, restore, delete, member additions with parent team enforcement, duplicate prevention, role updates, member removal, and leave project safety (20 tests).
 
 ---
 
