@@ -524,30 +524,45 @@ Client Receives (notification:new & unread count badge update)
 
 ---
 
-## 📎 File Upload & Storage Management (Stage 9)
+## 📎 Project File Management & Cloud Storage (Stage 9)
 
-### 1. File Upload Architecture
+### 1. Storage Architecture & Flow
 
 ```text
-Client (Web / Mobile)
-       ↓ Multipart Form-Data
-Multer Middleware (MIME Type Filter & 10MB Limit)
-       ↓ Disk Storage
-Local Upload Directory (/uploads/{timestamp}-{random}.ext)
-       ↓
-PostgreSQL Persistence (Prisma File Model with Cascade Relations)
-       ↓
-Activity Feed Trigger (Logs file upload event to project timeline)
+React / React Native File Picker
+       ↓ Multipart Form-Data (POST /api/projects/:projectId/files)
+Node.js API (Express + Multer in Memory Buffer)
+       ↓ Authorization (requireProjectMember)
+Cloud Storage (S3 / Cloudflare R2 / MinIO / Local Fallback via IStorageProvider)
+       ↓ Safe Storage Key (projects/{projectId}/{uuid}-{safeFileName})
+PostgreSQL Metadata (Prisma File Model with Cascade Delete)
+       ↓ Activity Timeline & Real-Time Sync
+Socket.IO Broadcast (`file:new`, `file:updated`, `file:deleted` to `project:{id}`)
 ```
+
+* **Cloud Storage Abstraction (`IStorageProvider`)**: Decoupled interface supporting Cloudflare R2, AWS S3, and local fallback without hardcoded vendor locks.
+* **Stateless & Restart-Safe**: Files are never stored permanently on the server filesystem, ensuring 100% compatibility with stateless hosting platforms (Render, Railway, Fly.io).
+* **Compensating Transactions**: If database insertion fails after a successful storage upload, the service automatically deletes the orphaned object from cloud storage.
+* **Presigned Download URLs**: Short-lived signed URLs with `Content-Disposition` attachments ensure storage credentials are never exposed to clients.
 
 ### 2. REST File Management Endpoints
 
 | Method | Endpoint | Access | Description |
 |---|---|---|---|
-| `POST` | `/api/files/project/:projectId` | Project Member | Upload project attachment (max 10MB) |
-| `GET` | `/api/files/project/:projectId` | Project Member | List all project files with uploader metadata |
-| `GET` | `/api/files/:fileId/download` | Project Member | Download attachment file |
-| `DELETE` | `/api/files/:fileId` | Uploader / Owner / Lead | Delete file and clean up storage disk |
+| `POST` | `/api/projects/:projectId/files` | Project Member | Upload project attachment (max 25MB) |
+| `GET` | `/api/projects/:projectId/files` | Project Member | List all project files with search, sorting (`newest`, `oldest`, `name`, `size`), and pagination |
+| `GET` | `/api/files/:fileId` | Project Member | Get single file details and metadata |
+| `GET` | `/api/files/:fileId/download` | Project Member | Secure download via short-lived signed URL or proxy stream |
+| `PATCH` | `/api/files/:fileId` | Uploader / Owner / Lead | Rename file with path-traversal protection |
+| `DELETE` | `/api/files/:fileId` | Uploader / Owner / Lead | Delete file from cloud storage and remove database metadata |
+
+### 3. Real-Time Socket.IO File Events
+
+| Direction | Event | Payload | Scope |
+|---|---|---|---|
+| Server $\to$ Client | `file:new` | `ProjectFile` | `project:${projectId}` |
+| Server $\to$ Client | `file:updated` | `ProjectFile` | `project:${projectId}` |
+| Server $\to$ Client | `file:deleted` | `{ fileId, projectId }` | `project:${projectId}` |
 
 ---
 
@@ -560,7 +575,7 @@ cd server
 npm test
 ```
 
-### Test Coverage (123 Passed Tests)
+### Test Coverage (134 Passed Tests)
 
 - **JWT Utilities (`jwt.test.ts`)**: Access token generation, claims validation, refresh token creation, token tampering rejection, and SHA-256 hash determinism (5 tests).
 - **Password Utilities (`password.test.ts`)**: Bcrypt salt hashing, positive match verification, and negative mismatch rejection (3 tests).
@@ -573,7 +588,7 @@ npm test
 - **Real-Time Chat & Socket.IO (`chat.test.ts`)**: REST message history, 403 outsider rejection, message deletion, Socket JWT authentication, project room joining, 403 non-member room join rejection, real-time message sending and persistence, empty and oversized validation, critical room isolation verification, and typing indicators (11 tests).
 - **Notifications & Preferences (`notification.test.ts`)**: User notification preferences GET/PATCH, paginated notifications list, unread counts, mark read, mark all read, delete, user isolation (403), scheduled due-soon task checks, and overdue task checks with deduplication (9 tests).
 - **Project Activity Feed (`activity.test.ts`)**: Activity feed pagination, filtering by action type, non-member 403 authorization, and structured event metadata (5 tests).
-- **File Management & Uploads (`file.test.ts`)**: Multipart file uploads, project membership checks, file listings, downloads, authorized deletions, and non-owner 403 rejection (5 tests).
+- **File Management & Cloud Storage (`file.test.ts`)**: Multipart file uploads, project membership validation, 400 empty validation, 403 outsider rejection, paginated file listings, single file details, short-lived signed download redirects, role-based file renaming (owner/lead/uploader vs viewer 403), role-based file deletion (storage cleanup + DB record deletion), and cross-project security isolation (16 tests).
 
 ---
 

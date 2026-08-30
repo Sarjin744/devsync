@@ -1,44 +1,46 @@
 import multer from 'multer';
-import path from 'path';
 import { env } from '../config/env';
 import { AppError } from '../utils/errors';
-import fs from 'fs';
 
-// Ensure upload directory exists
-const uploadDir = env.LOCAL_UPLOAD_DIR;
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
-
-const ALLOWED_MIME_TYPES = [
+export const ALLOWED_MIME_TYPES = [
+  // Images
   'image/jpeg',
   'image/jpg',
   'image/png',
   'image/webp',
   'image/gif',
+  'image/svg+xml',
+  // Documents
   'application/pdf',
   'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/zip',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
   'text/plain',
+  'text/csv',
+  // Archives & Code
+  'application/zip',
+  'application/x-zip-compressed',
+  'application/x-tar',
+  'application/gzip',
+  'application/json',
 ];
 
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    cb(null, uploadDir);
-  },
-  filename: (_req, file, cb) => {
-    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-    const ext = path.extname(file.originalname);
-    cb(null, `${uniqueSuffix}${ext}`);
-  },
-});
+// Memory storage for stateless cloud uploads
+const storage = multer.memoryStorage();
 
 const fileFilter: multer.Options['fileFilter'] = (_req, file, cb) => {
+  // Filename path traversal protection
+  if (file.originalname.includes('..') || file.originalname.includes('/') || file.originalname.includes('\\')) {
+    return cb(new AppError('Invalid filename detected', 400));
+  }
+
   if (ALLOWED_MIME_TYPES.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new AppError(`File type ${file.mimetype} is not allowed`, 400));
+    cb(new AppError(`File type ${file.mimetype} is not supported`, 400));
   }
 };
 
@@ -47,5 +49,6 @@ export const upload = multer({
   fileFilter,
   limits: {
     fileSize: env.MAX_FILE_SIZE_MB * 1024 * 1024,
+    files: 5,
   },
 });

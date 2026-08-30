@@ -143,6 +143,18 @@ export const api = {
   markAsRead: (id: string) => request(`/api/notifications/${id}/read`, { method: 'PATCH' }),
   markAllAsRead: () => request('/api/notifications/read-all', { method: 'PATCH' }),
 
+  // Files
+  getProjectFiles: (projectId: string, params?: { sort?: string; search?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.sort) query.append('sort', params.sort);
+    if (params?.search) query.append('search', params.search);
+    const queryString = query.toString();
+    return request(`/api/projects/${projectId}/files${queryString ? `?${queryString}` : ''}`);
+  },
+  deleteProjectFile: (fileId: string) => request(`/api/files/${fileId}`, { method: 'DELETE' }),
+  renameProjectFile: (fileId: string, originalName: string) =>
+    request(`/api/files/${fileId}`, { method: 'PATCH', body: JSON.stringify({ originalName }) }),
+
   // Activity
   getProjectActivity: (projectId: string) => request(`/api/activity/project/${projectId}`),
 

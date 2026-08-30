@@ -233,7 +233,10 @@ export type ActivityType =
   | 'TASK_STATUS_CHANGED'
   | 'TASK_PRIORITY_CHANGED'
   | 'TASK_COMPLETED'
-  | 'CHAT_MESSAGE';
+  | 'CHAT_MESSAGE'
+  | 'FILE_UPLOADED'
+  | 'FILE_RENAMED'
+  | 'FILE_DELETED';
 
 export interface Activity {
   id: string;
@@ -256,13 +259,19 @@ export interface Activity {
 export interface ProjectFile {
   id: string;
   fileName: string;
+  originalName: string;
+  storageKey: string;
   fileUrl: string;
   mimeType: string;
   fileSize: number;
+  size: number;
+  url: string;
+  description?: string | null;
   projectId: string;
   uploadedById: string;
   uploadedBy?: UserPublic;
   createdAt: string;
+  updatedAt: string;
 }
 
 // ============================================================
@@ -332,4 +341,7 @@ export interface SocketEvents {
   'user:online': { userId: string };
   'user:offline': { userId: string };
   'task:updated': Task;
+  'file:new': ProjectFile;
+  'file:updated': ProjectFile;
+  'file:deleted': { fileId: string; projectId: string };
 }

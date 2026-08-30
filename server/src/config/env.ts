@@ -45,9 +45,16 @@ export const env = {
     optionalEnv('WEB_ORIGIN', optionalEnv('CLIENT_URL', 'http://localhost:3000,http://localhost:8081')),
   ),
 
-  STORAGE_PROVIDER: optionalEnv('STORAGE_PROVIDER', 'local') as 'local' | 'cloudinary',
+  STORAGE_PROVIDER: optionalEnv('STORAGE_PROVIDER', 'local') as 's3' | 'r2' | 'cloudinary' | 'local',
   LOCAL_UPLOAD_DIR: optionalEnv('LOCAL_UPLOAD_DIR', 'uploads'),
-  MAX_FILE_SIZE_MB: parseInt(optionalEnv('MAX_FILE_SIZE_MB', '10'), 10),
+  MAX_FILE_SIZE_MB: parseInt(optionalEnv('MAX_FILE_SIZE_MB', '25'), 10),
+
+  STORAGE_ENDPOINT: optionalEnv('STORAGE_ENDPOINT', ''),
+  STORAGE_REGION: optionalEnv('STORAGE_REGION', 'us-east-1'),
+  STORAGE_BUCKET: optionalEnv('STORAGE_BUCKET', ''),
+  STORAGE_ACCESS_KEY: optionalEnv('STORAGE_ACCESS_KEY', ''),
+  STORAGE_SECRET_KEY: optionalEnv('STORAGE_SECRET_KEY', ''),
+  STORAGE_PUBLIC_URL: optionalEnv('STORAGE_PUBLIC_URL', ''),
 
   CLOUDINARY_CLOUD_NAME: optionalEnv('CLOUDINARY_CLOUD_NAME', ''),
   CLOUDINARY_API_KEY: optionalEnv('CLOUDINARY_API_KEY', ''),

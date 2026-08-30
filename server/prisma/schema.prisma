@@ -291,10 +291,14 @@ model File {
   projectId    String
   uploadedById String
   fileName     String
+  originalName String   @default("")
+  storageKey   String   @default("")
   fileUrl      String
   mimeType     String
   fileSize     Int
+  description  String?
   createdAt    DateTime @default(now())
+  updatedAt    DateTime @default(now()) @updatedAt
 
   // Relationships
   project    Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -302,6 +306,8 @@ model File {
 
   @@index([projectId])
   @@index([uploadedById])
+  @@index([createdAt])
+  @@index([projectId, createdAt])
 }
 
 model Activity {

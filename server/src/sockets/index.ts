@@ -96,3 +96,7 @@ export function initializeSocket(server: HttpServer): SocketServer {
   logger.info('Socket.IO server initialized');
   return io;
 }
+
+export function getIO(): SocketServer | undefined {
+  return io;
+}
