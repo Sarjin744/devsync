@@ -7,7 +7,7 @@ import { useParams } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { cn, TASK_STATUS_COLORS, PRIORITY_COLORS, formatDate, getInitials } from '@/lib/utils';
 import type { Project, Task } from '@devsync/shared';
-import { Plus, Loader2, MessageSquare, Calendar, Flag } from 'lucide-react';
+import { Plus, Loader2, MessageSquare, Calendar } from 'lucide-react';
 import Link from 'next/link';
 
 const KANBAN_COLUMNS = [
@@ -24,7 +24,6 @@ function TaskCard({
   task: Task;
   onStatusChange: (taskId: string, status: string) => void;
 }) {
-  const colors = TASK_STATUS_COLORS[task.status];
   const priorityColors = PRIORITY_COLORS[task.priority];
 
   return (

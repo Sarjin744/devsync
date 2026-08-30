@@ -66,12 +66,10 @@ app.use(requestLogger);
 app.use('/uploads', express.static('uploads'));
 
 // ─── Health Check ────────────────────────────────────────────
-app.get('/health', (_req: Request, res: Response) => {
-  res.json({
+app.get(['/api/health', '/health'], (_req: Request, res: Response) => {
+  res.status(200).json({
     success: true,
     message: 'DevSync API is running',
-    timestamp: new Date().toISOString(),
-    environment: env.NODE_ENV,
   });
 });
 
