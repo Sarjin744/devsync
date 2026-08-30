@@ -88,11 +88,7 @@ describe('Notification & Preferences Suite (Stage 8)', () => {
     initializeSocket(server);
 
     await new Promise<void>((resolve) => {
-      server.listen(0, () => {
-        const addr = server.address();
-        serverPort = typeof addr === 'object' && addr ? addr.port : 5000;
-        resolve();
-      });
+      server.listen(0, () => resolve());
     });
   });
 

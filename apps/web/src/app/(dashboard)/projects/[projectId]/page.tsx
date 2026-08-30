@@ -34,6 +34,7 @@ import {
 import Link from 'next/link';
 import { ProjectChat } from '@/components/chat/ProjectChat';
 import { ProjectActivityTimeline } from '@/components/activity/ProjectActivityTimeline';
+import { ProjectFiles } from '@/components/files/ProjectFiles';
 
 interface ProjectMember {
   id: string;
@@ -885,17 +886,9 @@ export default function ProjectDetailPage({
         <ProjectChat projectId={projectId} members={project.members} />
       )}
 
-      {/* ─── TAB 5: FILES (Placeholder) ─────────────────────────────── */}
+      {/* ─── TAB 5: FILES ─────────────────────────────────────────── */}
       {activeTab === 'files' && (
-        <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center max-w-md mx-auto shadow-sm">
-          <div className="w-14 h-14 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <FileText size={24} />
-          </div>
-          <h3 className="font-semibold text-gray-900 text-lg">Project Files & Attachments</h3>
-          <p className="text-sm text-gray-500 mt-1 mb-4">
-            Multi-file uploading and asset management will be available in Stage 8.
-          </p>
-        </div>
+        <ProjectFiles projectId={projectId} canManage={canManage} />
       )}
 
       {/* ─── TAB 6: ACTIVITY ──────────────────────────────────────── */}

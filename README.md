@@ -524,6 +524,33 @@ Client Receives (notification:new & unread count badge update)
 
 ---
 
+## 📎 File Upload & Storage Management (Stage 9)
+
+### 1. File Upload Architecture
+
+```text
+Client (Web / Mobile)
+       ↓ Multipart Form-Data
+Multer Middleware (MIME Type Filter & 10MB Limit)
+       ↓ Disk Storage
+Local Upload Directory (/uploads/{timestamp}-{random}.ext)
+       ↓
+PostgreSQL Persistence (Prisma File Model with Cascade Relations)
+       ↓
+Activity Feed Trigger (Logs file upload event to project timeline)
+```
+
+### 2. REST File Management Endpoints
+
+| Method | Endpoint | Access | Description |
+|---|---|---|---|
+| `POST` | `/api/files/project/:projectId` | Project Member | Upload project attachment (max 10MB) |
+| `GET` | `/api/files/project/:projectId` | Project Member | List all project files with uploader metadata |
+| `GET` | `/api/files/:fileId/download` | Project Member | Download attachment file |
+| `DELETE` | `/api/files/:fileId` | Uploader / Owner / Lead | Delete file and clean up storage disk |
+
+---
+
 ## 🧪 Testing Suite
 
 Run the full automated test suite using Jest:
@@ -533,7 +560,7 @@ cd server
 npm test
 ```
 
-### Test Coverage (118 Passed Tests)
+### Test Coverage (123 Passed Tests)
 
 - **JWT Utilities (`jwt.test.ts`)**: Access token generation, claims validation, refresh token creation, token tampering rejection, and SHA-256 hash determinism (5 tests).
 - **Password Utilities (`password.test.ts`)**: Bcrypt salt hashing, positive match verification, and negative mismatch rejection (3 tests).
@@ -546,6 +573,7 @@ npm test
 - **Real-Time Chat & Socket.IO (`chat.test.ts`)**: REST message history, 403 outsider rejection, message deletion, Socket JWT authentication, project room joining, 403 non-member room join rejection, real-time message sending and persistence, empty and oversized validation, critical room isolation verification, and typing indicators (11 tests).
 - **Notifications & Preferences (`notification.test.ts`)**: User notification preferences GET/PATCH, paginated notifications list, unread counts, mark read, mark all read, delete, user isolation (403), scheduled due-soon task checks, and overdue task checks with deduplication (9 tests).
 - **Project Activity Feed (`activity.test.ts`)**: Activity feed pagination, filtering by action type, non-member 403 authorization, and structured event metadata (5 tests).
+- **File Management & Uploads (`file.test.ts`)**: Multipart file uploads, project membership checks, file listings, downloads, authorized deletions, and non-owner 403 rejection (5 tests).
 
 ---
 
