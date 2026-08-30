@@ -22,6 +22,12 @@ import {
   removeProjectMember,
 } from '../controllers/project.controller';
 
+import {
+  createProjectTask,
+  getProjectTasks,
+} from '../controllers/task.controller';
+import { createTaskSchema } from '../validators/task.validator';
+
 const router = Router();
 
 // All project routes require authentication
@@ -38,6 +44,10 @@ router.patch('/:projectId/archive', archiveProject); // Compatibility
 router.post('/:projectId/restore', restoreProject);
 router.delete('/:projectId', deleteProject);
 router.post('/:projectId/leave', leaveProject);
+
+// Project Tasks
+router.get('/:projectId/tasks', getProjectTasks);
+router.post('/:projectId/tasks', validate({ body: createTaskSchema }), createProjectTask);
 
 // Project Members
 router.get('/:projectId/members', getProjectMembers);

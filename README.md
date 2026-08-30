@@ -408,6 +408,37 @@ When adding members to a project via `POST /api/projects/:projectId/members`, th
 
 ---
 
+## 📋 Task Management & Kanban Board (Stage 6)
+
+### 1. Task Lifecycle & Kanban Workflow
+* **Kanban Statuses**: `TODO` $\to$ `IN_PROGRESS` $\to$ `IN_REVIEW` $\to$ `DONE`.
+* **Priorities**: `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`.
+* **Due Date Tracking**: Timezone-safe due dates with dynamic overdue calculations (`dueDate < now` and `status != DONE`).
+* **Optimistic Drag-and-Drop**: Web Kanban board supports smooth column shifts with instant optimistic updates and automatic state rollback upon API errors.
+
+### 2. Task Permissions & Assignment
+* **Task Creation**: Only project members with `OWNER`, `TEAM_LEAD`, or `DEVELOPER` roles can create tasks.
+* **Assignee Enforcement**: Task assignees must belong to the active project membership roster.
+* **Update Permissions**: `OWNER` and `TEAM_LEAD` have full task editing permissions. Assigned `DEVELOPER` or task creator can update status, priority, and descriptions.
+* **Deletion**: Only `OWNER`, `TEAM_LEAD`, or task creator can permanently delete tasks.
+
+### 3. Server-Side Filtering & Pagination
+`GET /api/projects/:projectId/tasks` supports database-side filtering (`status`, `priority`, `assigneeId`) and pagination (`page`, `limit`), returning standardized pagination metadata (`total`, `totalPages`, `page`, `limit`).
+
+### Task Endpoints
+
+| Method | Endpoint | Access | Description |
+|---|---|---|---|
+| `POST` | `/api/projects/:projectId/tasks` | Project Member | Create new task in project |
+| `GET` | `/api/projects/:projectId/tasks` | Project Member | List project tasks with filters & pagination |
+| `GET` | `/api/tasks/:taskId` | Project Member | Get task details, creator, and assignee |
+| `PATCH` | `/api/tasks/:taskId` | Permitted User | Update task title, description, priority, assignee, due date |
+| `PATCH` | `/api/tasks/:taskId/status` | Permitted User | Shift task status (`TODO`, `IN_PROGRESS`, `IN_REVIEW`, `DONE`) |
+| `DELETE` | `/api/tasks/:taskId` | Owner/Lead/Creator | Delete task permanently |
+| `GET` | `/api/tasks/my` | Bearer Auth | List all tasks assigned to authenticated user |
+
+---
+
 ## 🧪 Testing Suite
 
 Run the full automated test suite using Jest:
@@ -417,7 +448,7 @@ cd server
 npm test
 ```
 
-### Test Coverage (76 Passed Tests)
+### Test Coverage (92 Passed Tests)
 
 - **JWT Utilities (`jwt.test.ts`)**: Access token generation, claims validation, refresh token creation, token tampering rejection, and SHA-256 hash determinism (5 tests).
 - **Password Utilities (`password.test.ts`)**: Bcrypt salt hashing, positive match verification, and negative mismatch rejection (3 tests).
@@ -426,6 +457,7 @@ npm test
 - **User Profile & Search (`user.test.ts`)**: Get profile, update profile, change password with session revocation, and paginated user search (9 tests).
 - **Teams & Invitations (`team.test.ts`)**: Team CRUD, non-member 403 authorization, owner permissions, member role updates, invitation creation, duplicate invitation prevention, and transactional acceptance/rejection (15 tests).
 - **Project Management (`project.test.ts`)**: Project creation, team membership validation, project listing, details, member 403 authorization, owner/lead updates, archive, restore, delete, member additions with parent team enforcement, duplicate prevention, role updates, member removal, and leave project safety (20 tests).
+- **Task Management & Kanban (`task.test.ts`)**: Task creation with defaults, validation errors, assignee project membership enforcement, paginated listings with status/priority filters, single task details, role-based updates, status transitions, authorized deletions, and user assigned tasks (16 tests).
 
 ---
 

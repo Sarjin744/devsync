@@ -1,4 +1,4 @@
-import { ApiResponse } from '@devsync/shared';
+import { ApiResponse, PaginationMeta } from '@devsync/shared';
 import { Response } from 'express';
 
 export function sendSuccess<T>(
@@ -6,11 +6,13 @@ export function sendSuccess<T>(
   data: T,
   message?: string,
   statusCode = 200,
+  pagination?: PaginationMeta,
 ): Response {
   const response: ApiResponse<T> = {
     success: true,
     data,
     message,
+    pagination,
   };
   return res.status(statusCode).json(response);
 }

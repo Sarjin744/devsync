@@ -228,11 +228,19 @@ export interface ProjectFile {
 // API response types
 // ============================================================
 
+export interface PaginationMeta {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
 export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;
   message?: string;
   error?: string;
+  pagination?: PaginationMeta;
 }
 
 export interface PaginatedResponse<T> {

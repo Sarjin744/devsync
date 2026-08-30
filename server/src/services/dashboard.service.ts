@@ -12,12 +12,16 @@ const USER_SELECT = {
 } as const;
 
 export async function getDashboardStats(userId: string) {
+  const now = new Date();
+
   const [
     totalProjects,
     activeProjects,
+    totalTasks,
     pendingTasks,
     completedTasks,
     assignedTasks,
+    overdueTasks,
     recentActivity,
     recentNotifications,
   ] = await Promise.all([
@@ -29,6 +33,13 @@ export async function getDashboardStats(userId: string) {
       where: {
         userId,
         project: { status: 'ACTIVE' },
+      },
+    }),
+
+    // Total tasks across user's projects
+    prisma.task.count({
+      where: {
+        project: { members: { some: { userId } } },
       },
     }),
 
@@ -56,6 +67,15 @@ export async function getDashboardStats(userId: string) {
       },
     }),
 
+    // Overdue tasks in user's projects
+    prisma.task.count({
+      where: {
+        project: { members: { some: { userId } } },
+        status: { not: 'DONE' },
+        dueDate: { lt: now },
+      },
+    }),
+
     // Recent activity across all user's projects
     prisma.activity.findMany({
       where: {
@@ -77,9 +97,11 @@ export async function getDashboardStats(userId: string) {
   return {
     totalProjects,
     activeProjects,
+    totalTasks,
     pendingTasks,
     completedTasks,
     assignedTasks,
+    overdueTasks,
     recentActivity: recentActivity.map((a) => ({
       ...a,
       createdAt: a.createdAt.toISOString(),

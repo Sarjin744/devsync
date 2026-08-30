@@ -27,6 +27,9 @@ import {
   FileText,
   Activity,
   Layers,
+  Plus,
+  AlertTriangle,
+  Clock,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -57,6 +60,26 @@ interface TeamMemberItem {
   };
 }
 
+interface TaskItem {
+  id: string;
+  title: string;
+  description: string | null;
+  status: 'TODO' | 'IN_PROGRESS' | 'IN_REVIEW' | 'DONE';
+  priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  projectId: string;
+  creatorId: string;
+  assigneeId: string | null;
+  dueDate: string | null;
+  isOverdue: boolean;
+  createdAt: string;
+  updatedAt: string;
+  assignee: {
+    id: string;
+    name: string;
+    email: string;
+  } | null;
+}
+
 interface ProjectData {
   id: string;
   name: string;
@@ -82,6 +105,20 @@ interface ProjectData {
   updatedAt: string;
 }
 
+const KANBAN_COLUMNS: { status: 'TODO' | 'IN_PROGRESS' | 'IN_REVIEW' | 'DONE'; label: string; color: string }[] = [
+  { status: 'TODO', label: 'To Do', color: 'border-t-gray-400' },
+  { status: 'IN_PROGRESS', label: 'In Progress', color: 'border-t-blue-500' },
+  { status: 'IN_REVIEW', label: 'In Review', color: 'border-t-purple-500' },
+  { status: 'DONE', label: 'Done', color: 'border-t-emerald-500' },
+];
+
+const PRIORITY_BADGES: Record<string, { bg: string; text: string }> = {
+  CRITICAL: { bg: 'bg-red-50 text-red-700 border-red-200', text: 'Critical' },
+  HIGH: { bg: 'bg-amber-50 text-amber-700 border-amber-200', text: 'High' },
+  MEDIUM: { bg: 'bg-blue-50 text-blue-700 border-blue-200', text: 'Medium' },
+  LOW: { bg: 'bg-gray-50 text-gray-700 border-gray-200', text: 'Low' },
+};
+
 export default function ProjectDetailPage({
   params,
 }: {
@@ -94,19 +131,35 @@ export default function ProjectDetailPage({
   const queryClient = useQueryClient();
 
   const [activeTab, setActiveTab] = useState<
-    'overview' | 'members' | 'tasks' | 'chat' | 'files' | 'activity'
-  >('overview');
+    'tasks' | 'overview' | 'members' | 'chat' | 'files' | 'activity'
+  >('tasks');
 
   // Modals
   const [showEditModal, setShowEditModal] = useState(false);
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showCreateTaskModal, setShowCreateTaskModal] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<TaskItem | null>(null);
 
-  // Form states
+  // Form states - Project
   const [editName, setEditName] = useState('');
   const [editDesc, setEditDesc] = useState('');
   const [selectedNewUserId, setSelectedNewUserId] = useState('');
   const [selectedNewRole, setSelectedNewRole] = useState<'OWNER' | 'TEAM_LEAD' | 'DEVELOPER' | 'VIEWER'>('DEVELOPER');
+
+  // Form states - Task Creation
+  const [taskTitle, setTaskTitle] = useState('');
+  const [taskDesc, setTaskDesc] = useState('');
+  const [taskPriority, setTaskPriority] = useState<'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'>('MEDIUM');
+  const [taskAssigneeId, setTaskAssigneeId] = useState('');
+  const [taskDueDate, setTaskDueDate] = useState('');
+
+  // Filters - Tasks
+  const [priorityFilter, setPriorityFilter] = useState<string>('ALL');
+  const [assigneeFilter, setAssigneeFilter] = useState<string>('ALL');
+
+  // Drag state
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
 
   // Project query
   const { data: project, isLoading, isError } = useQuery<ProjectData>({
@@ -117,7 +170,25 @@ export default function ProjectDetailPage({
     },
   });
 
-  // Team members query (if project has parent team) for add member picker
+  // Tasks query
+  const { data: tasksData, isLoading: tasksLoading } = useQuery<{
+    tasks: TaskItem[];
+  }>({
+    queryKey: ['tasks', projectId, priorityFilter, assigneeFilter],
+    queryFn: async () => {
+      const p = new URLSearchParams();
+      if (priorityFilter !== 'ALL') p.append('priority', priorityFilter);
+      if (assigneeFilter === 'ME' && user) p.append('assigneeId', user.id);
+      else if (assigneeFilter !== 'ALL' && assigneeFilter !== 'ME') p.append('assigneeId', assigneeFilter);
+
+      const res = await apiClient.get(`/api/projects/${projectId}/tasks?${p.toString()}&limit=100`);
+      return { tasks: res.data.data };
+    },
+  });
+
+  const tasks = tasksData?.tasks || [];
+
+  // Team members query (for add member modal)
   const { data: teamMembers = [] } = useQuery<TeamMemberItem[]>({
     queryKey: ['teamMembers', project?.teamId],
     enabled: !!project?.teamId && showAddMemberModal,
@@ -131,7 +202,7 @@ export default function ProjectDetailPage({
   const isLead = project?.role === 'TEAM_LEAD';
   const canManage = isOwner || isLead;
 
-  // Edit Project Mutation
+  // Project Mutations
   const updateMutation = useMutation({
     mutationFn: async (payload: { name?: string; description?: string }) => {
       const res = await apiClient.patch(`/api/projects/${projectId}`, payload);
@@ -148,7 +219,6 @@ export default function ProjectDetailPage({
     },
   });
 
-  // Archive / Restore Mutations
   const archiveMutation = useMutation({
     mutationFn: async () => {
       const res = await apiClient.post(`/api/projects/${projectId}/archive`);
@@ -156,7 +226,6 @@ export default function ProjectDetailPage({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['project', projectId] });
-      queryClient.invalidateQueries({ queryKey: ['projects'] });
       toast.success('Project archived');
     },
     onError: (err: { response?: { data?: { error?: string } } }) => {
@@ -171,22 +240,20 @@ export default function ProjectDetailPage({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['project', projectId] });
-      queryClient.invalidateQueries({ queryKey: ['projects'] });
-      toast.success('Project restored to active');
+      toast.success('Project restored');
     },
     onError: (err: { response?: { data?: { error?: string } } }) => {
       toast.error(err.response?.data?.error || 'Failed to restore project');
     },
   });
 
-  // Delete Mutation
   const deleteMutation = useMutation({
     mutationFn: async () => {
       await apiClient.delete(`/api/projects/${projectId}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['projects'] });
-      toast.success('Project permanently deleted');
+      toast.success('Project deleted');
       router.push('/projects');
     },
     onError: (err: { response?: { data?: { error?: string } } }) => {
@@ -194,7 +261,6 @@ export default function ProjectDetailPage({
     },
   });
 
-  // Leave Mutation
   const leaveMutation = useMutation({
     mutationFn: async () => {
       await apiClient.post(`/api/projects/${projectId}/leave`);
@@ -209,7 +275,78 @@ export default function ProjectDetailPage({
     },
   });
 
-  // Add Member Mutation
+  // Task Mutations
+  const createTaskMutation = useMutation({
+    mutationFn: async (payload: {
+      title: string;
+      description?: string;
+      priority: string;
+      assigneeId?: string;
+      dueDate?: string;
+    }) => {
+      const res = await apiClient.post(`/api/projects/${projectId}/tasks`, payload);
+      return res.data.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tasks', projectId] });
+      setShowCreateTaskModal(false);
+      setTaskTitle('');
+      setTaskDesc('');
+      setTaskPriority('MEDIUM');
+      setTaskAssigneeId('');
+      setTaskDueDate('');
+      toast.success('Task created successfully');
+    },
+    onError: (err: { response?: { data?: { error?: string } } }) => {
+      toast.error(err.response?.data?.error || 'Failed to create task');
+    },
+  });
+
+  const updateStatusMutation = useMutation({
+    mutationFn: async ({ taskId, status }: { taskId: string; status: string }) => {
+      const res = await apiClient.patch(`/api/tasks/${taskId}/status`, { status });
+      return res.data.data;
+    },
+    onMutate: async ({ taskId, status }) => {
+      await queryClient.cancelQueries({ queryKey: ['tasks', projectId] });
+      const previous = queryClient.getQueryData(['tasks', projectId, priorityFilter, assigneeFilter]);
+      queryClient.setQueryData(
+        ['tasks', projectId, priorityFilter, assigneeFilter],
+        (old: { tasks: TaskItem[] } | undefined) => {
+          if (!old) return old;
+          return {
+            tasks: old.tasks.map((t) => (t.id === taskId ? { ...t, status } : t)),
+          };
+        },
+      );
+      return { previous };
+    },
+    onError: (_err, _variables, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(['tasks', projectId, priorityFilter, assigneeFilter], context.previous);
+      }
+      toast.error('Failed to update task status');
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['tasks', projectId] });
+    },
+  });
+
+  const deleteTaskMutation = useMutation({
+    mutationFn: async (taskId: string) => {
+      await apiClient.delete(`/api/tasks/${taskId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tasks', projectId] });
+      setSelectedTask(null);
+      toast.success('Task deleted');
+    },
+    onError: (err: { response?: { data?: { error?: string } } }) => {
+      toast.error(err.response?.data?.error || 'Failed to delete task');
+    },
+  });
+
+  // Member Mutations
   const addMemberMutation = useMutation({
     mutationFn: async (payload: { userId: string; role: string }) => {
       const res = await apiClient.post(`/api/projects/${projectId}/members`, payload);
@@ -219,14 +356,13 @@ export default function ProjectDetailPage({
       queryClient.invalidateQueries({ queryKey: ['project', projectId] });
       setShowAddMemberModal(false);
       setSelectedNewUserId('');
-      toast.success('Member added to project');
+      toast.success('Member added');
     },
     onError: (err: { response?: { data?: { error?: string } } }) => {
       toast.error(err.response?.data?.error || 'Failed to add member');
     },
   });
 
-  // Change Role Mutation
   const changeRoleMutation = useMutation({
     mutationFn: async ({ memberUserId, role }: { memberUserId: string; role: string }) => {
       const res = await apiClient.patch(`/api/projects/${projectId}/members/${memberUserId}`, { role });
@@ -234,21 +370,20 @@ export default function ProjectDetailPage({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['project', projectId] });
-      toast.success('Member role updated');
+      toast.success('Role updated');
     },
     onError: (err: { response?: { data?: { error?: string } } }) => {
       toast.error(err.response?.data?.error || 'Failed to update role');
     },
   });
 
-  // Remove Member Mutation
   const removeMemberMutation = useMutation({
     mutationFn: async (memberUserId: string) => {
       await apiClient.delete(`/api/projects/${projectId}/members/${memberUserId}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['project', projectId] });
-      toast.success('Member removed from project');
+      toast.success('Member removed');
     },
     onError: (err: { response?: { data?: { error?: string } } }) => {
       toast.error(err.response?.data?.error || 'Failed to remove member');
@@ -280,7 +415,6 @@ export default function ProjectDetailPage({
     );
   }
 
-  // Available team members not yet in project
   const availableTeamUsers = teamMembers.filter(
     (tm) => !project.members.some((pm) => pm.userId === tm.userId),
   );
@@ -311,7 +445,7 @@ export default function ProjectDetailPage({
                 </span>
               )}
               <span className="text-xs font-semibold px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-full">
-                Your Role: {project.role}
+                Role: {project.role}
               </span>
             </div>
 
@@ -336,6 +470,13 @@ export default function ProjectDetailPage({
 
           {/* Action buttons */}
           <div className="flex flex-wrap items-center gap-2.5 self-start md:self-auto">
+            <button
+              onClick={() => setShowCreateTaskModal(true)}
+              className="inline-flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-4 py-2 rounded-xl transition shadow-sm"
+            >
+              <Plus size={14} /> New Task
+            </button>
+
             {canManage && (
               <button
                 onClick={() => {
@@ -397,9 +538,9 @@ export default function ProjectDetailPage({
         {/* Navigation Tabs */}
         <div className="flex items-center gap-1 pt-4 border-t border-gray-100 overflow-x-auto">
           {[
+            { key: 'tasks', label: 'Kanban Board', icon: Layers },
             { key: 'overview', label: 'Overview', icon: FolderKanban },
             { key: 'members', label: `Members (${project.members.length})`, icon: Users },
-            { key: 'tasks', label: 'Tasks', icon: Layers },
             { key: 'chat', label: 'Chat', icon: MessageSquare },
             { key: 'files', label: 'Files', icon: FileText },
             { key: 'activity', label: 'Activity', icon: Activity },
@@ -419,9 +560,166 @@ export default function ProjectDetailPage({
         </div>
       </div>
 
-      {/* Tab Contents */}
+      {/* ─── TAB 1: KANBAN BOARD ───────────────────────────────────── */}
+      {activeTab === 'tasks' && (
+        <div className="space-y-4">
+          {/* Filters Bar */}
+          <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-gray-500 uppercase">Priority:</span>
+                <select
+                  value={priorityFilter}
+                  onChange={(e) => setPriorityFilter(e.target.value)}
+                  className="text-xs font-medium px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none"
+                >
+                  <option value="ALL">All Priorities</option>
+                  <option value="CRITICAL">Critical</option>
+                  <option value="HIGH">High</option>
+                  <option value="MEDIUM">Medium</option>
+                  <option value="LOW">Low</option>
+                </select>
+              </div>
 
-      {/* 1. OVERVIEW TAB */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-gray-500 uppercase">Assignee:</span>
+                <select
+                  value={assigneeFilter}
+                  onChange={(e) => setAssigneeFilter(e.target.value)}
+                  className="text-xs font-medium px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none"
+                >
+                  <option value="ALL">All Members</option>
+                  <option value="ME">Assigned to Me</option>
+                  {project.members.map((m) => (
+                    <option key={m.userId} value={m.userId}>
+                      {m.user.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <span className="text-xs text-gray-400 font-medium">
+              Total {tasks.length} task{tasks.length !== 1 ? 's' : ''} in view
+            </span>
+          </div>
+
+          {/* Kanban Columns Grid */}
+          {tasksLoading ? (
+            <div className="flex justify-center py-20">
+              <Loader2 className="animate-spin text-indigo-600" size={28} />
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {KANBAN_COLUMNS.map((col) => {
+                const columnTasks = tasks.filter((t) => t.status === col.status);
+
+                return (
+                  <div
+                    key={col.status}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={() => {
+                      if (draggedTaskId) {
+                        updateStatusMutation.mutate({ taskId: draggedTaskId, status: col.status });
+                        setDraggedTaskId(null);
+                      }
+                    }}
+                    className={`bg-gray-50/80 rounded-2xl border border-gray-200/70 p-3.5 flex flex-col min-h-[500px] border-t-4 ${col.color}`}
+                  >
+                    {/* Column Header */}
+                    <div className="flex items-center justify-between px-1 py-1.5 mb-3">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-xs text-gray-800 uppercase tracking-wider">
+                          {col.label}
+                        </span>
+                        <span className="text-xs font-semibold px-2 py-0.5 bg-gray-200 text-gray-700 rounded-full">
+                          {columnTasks.length}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => setShowCreateTaskModal(true)}
+                        className="text-gray-400 hover:text-indigo-600"
+                        title="Add task"
+                      >
+                        <Plus size={15} />
+                      </button>
+                    </div>
+
+                    {/* Column Task Cards */}
+                    <div className="space-y-3 flex-1 overflow-y-auto pr-0.5">
+                      {columnTasks.map((task) => {
+                        const priorityInfo = PRIORITY_BADGES[task.priority] || PRIORITY_BADGES.MEDIUM;
+
+                        return (
+                          <div
+                            key={task.id}
+                            draggable
+                            onDragStart={() => setDraggedTaskId(task.id)}
+                            onClick={() => setSelectedTask(task)}
+                            className="bg-white rounded-xl border border-gray-200/80 p-4 shadow-xs hover:shadow-md hover:border-indigo-200 transition cursor-pointer group space-y-3"
+                          >
+                            {/* Priority + Overdue tags */}
+                            <div className="flex items-center justify-between gap-1.5">
+                              <span
+                                className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border ${priorityInfo.bg}`}
+                              >
+                                {priorityInfo.text}
+                              </span>
+
+                              {task.isOverdue && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded border border-red-200">
+                                  <AlertTriangle size={10} /> Overdue
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Title & description */}
+                            <div>
+                              <h4 className="font-semibold text-gray-900 text-sm group-hover:text-indigo-600 transition leading-snug">
+                                {task.title}
+                              </h4>
+                              {task.description ? (
+                                <p className="text-xs text-gray-500 line-clamp-2 mt-1">
+                                  {task.description}
+                                </p>
+                              ) : null}
+                            </div>
+
+                            {/* Card Footer: Assignee & Due date */}
+                            <div className="pt-2 border-t border-gray-50 flex items-center justify-between text-xs text-gray-400">
+                              <div className="flex items-center gap-1.5">
+                                {task.assignee ? (
+                                  <div
+                                    className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 font-bold text-[10px] flex items-center justify-center"
+                                    title={`Assigned to ${task.assignee.name}`}
+                                  >
+                                    {getInitials(task.assignee.name)}
+                                  </div>
+                                ) : (
+                                  <span className="text-[11px] text-gray-400">Unassigned</span>
+                                )}
+                              </div>
+
+                              {task.dueDate && (
+                                <div className={`flex items-center gap-1 text-[11px] ${task.isOverdue ? 'text-red-600 font-semibold' : 'text-gray-400'}`}>
+                                  <Clock size={11} />
+                                  {formatDate(task.dueDate)}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ─── TAB 2: OVERVIEW ────────────────────────────────────────── */}
       {activeTab === 'overview' && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="md:col-span-2 space-y-6">
@@ -458,7 +756,6 @@ export default function ProjectDetailPage({
           </div>
 
           <div className="space-y-6">
-            {/* Project Owner Card */}
             <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
               <h3 className="font-bold text-gray-900 text-sm mb-4">Project Owner</h3>
               <div className="flex items-center gap-3">
@@ -471,28 +768,11 @@ export default function ProjectDetailPage({
                 </div>
               </div>
             </div>
-
-            {/* Quick stats */}
-            <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm space-y-3">
-              <h3 className="font-bold text-gray-900 text-sm mb-2">Metrics</h3>
-              <div className="flex items-center justify-between text-sm py-1 border-b border-gray-50">
-                <span className="text-gray-500">Total Members</span>
-                <span className="font-semibold text-gray-900">{project.members.length}</span>
-              </div>
-              <div className="flex items-center justify-between text-sm py-1 border-b border-gray-50">
-                <span className="text-gray-500">Status</span>
-                <span className="font-semibold text-indigo-600">{project.status}</span>
-              </div>
-              <div className="flex items-center justify-between text-sm py-1">
-                <span className="text-gray-500">Team</span>
-                <span className="font-semibold text-gray-900">{project.team?.name || 'None'}</span>
-              </div>
-            </div>
           </div>
         </div>
       )}
 
-      {/* 2. MEMBERS TAB */}
+      {/* ─── TAB 3: MEMBERS ─────────────────────────────────────────── */}
       {activeTab === 'members' && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="p-6 border-b border-gray-100 flex items-center justify-between">
@@ -546,7 +826,6 @@ export default function ProjectDetailPage({
                   </div>
 
                   <div className="flex items-center gap-3 self-end sm:self-center">
-                    {/* Role dropdown for OWNER */}
                     {isOwner && !isMemberOwner ? (
                       <select
                         value={member.role}
@@ -578,7 +857,6 @@ export default function ProjectDetailPage({
                       </span>
                     )}
 
-                    {/* Remove Member */}
                     {canManage && !isMemberOwner && !isSelf && (
                       <button
                         onClick={() => {
@@ -600,20 +878,7 @@ export default function ProjectDetailPage({
         </div>
       )}
 
-      {/* 3. TASKS TAB (Placeholder for Stage 6) */}
-      {activeTab === 'tasks' && (
-        <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center max-w-md mx-auto shadow-sm">
-          <div className="w-14 h-14 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <Layers size={24} />
-          </div>
-          <h3 className="font-semibold text-gray-900 text-lg">Task & Kanban System</h3>
-          <p className="text-sm text-gray-500 mt-1 mb-4">
-            Interactive task boards, sprint planning, and drag-and-drop Kanban will be enabled in Stage 6.
-          </p>
-        </div>
-      )}
-
-      {/* 4. CHAT TAB (Placeholder) */}
+      {/* ─── TAB 4: CHAT (Placeholder) ──────────────────────────────── */}
       {activeTab === 'chat' && (
         <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center max-w-md mx-auto shadow-sm">
           <div className="w-14 h-14 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
@@ -621,12 +886,12 @@ export default function ProjectDetailPage({
           </div>
           <h3 className="font-semibold text-gray-900 text-lg">Real-Time Project Chat</h3>
           <p className="text-sm text-gray-500 mt-1 mb-4">
-            WebSocket project chat channels and instant team communication will be available in Stage 7.
+            WebSocket project chat channels and team messaging will be available in Stage 7.
           </p>
         </div>
       )}
 
-      {/* 5. FILES TAB (Placeholder) */}
+      {/* ─── TAB 5: FILES (Placeholder) ─────────────────────────────── */}
       {activeTab === 'files' && (
         <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center max-w-md mx-auto shadow-sm">
           <div className="w-14 h-14 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
@@ -639,7 +904,7 @@ export default function ProjectDetailPage({
         </div>
       )}
 
-      {/* 6. ACTIVITY TAB (Placeholder) */}
+      {/* ─── TAB 6: ACTIVITY (Placeholder) ──────────────────────────── */}
       {activeTab === 'activity' && (
         <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center max-w-md mx-auto shadow-sm">
           <div className="w-14 h-14 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
@@ -652,7 +917,230 @@ export default function ProjectDetailPage({
         </div>
       )}
 
-      {/* Edit Project Modal */}
+      {/* ─── CREATE TASK MODAL ──────────────────────────────────────── */}
+      {showCreateTaskModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl relative animate-in fade-in zoom-in-95">
+            <button
+              onClick={() => setShowCreateTaskModal(false)}
+              className="absolute top-5 right-5 text-gray-400 hover:text-gray-600"
+            >
+              <X size={20} />
+            </button>
+            <h3 className="text-lg font-bold text-gray-900 mb-1">Create Task</h3>
+            <p className="text-xs text-gray-500 mb-4">Add a new item to this project Kanban board.</p>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!taskTitle.trim()) {
+                  toast.error('Task title is required');
+                  return;
+                }
+                createTaskMutation.mutate({
+                  title: taskTitle.trim(),
+                  description: taskDesc.trim() || undefined,
+                  priority: taskPriority,
+                  assigneeId: taskAssigneeId || undefined,
+                  dueDate: taskDueDate ? new Date(taskDueDate).toISOString() : undefined,
+                });
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1">
+                  Title *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={taskTitle}
+                  onChange={(e) => setTaskTitle(e.target.value)}
+                  placeholder="e.g. Build JWT auth verification"
+                  className="w-full text-sm px-3 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1">
+                  Description
+                </label>
+                <textarea
+                  rows={3}
+                  value={taskDesc}
+                  onChange={(e) => setTaskDesc(e.target.value)}
+                  placeholder="Task details and acceptance criteria..."
+                  className="w-full text-sm px-3 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1">
+                    Priority
+                  </label>
+                  <select
+                    value={taskPriority}
+                    onChange={(e) =>
+                      setTaskPriority(e.target.value as 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL')
+                    }
+                    className="w-full text-xs font-medium px-3 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                  >
+                    <option value="LOW">Low</option>
+                    <option value="MEDIUM">Medium</option>
+                    <option value="HIGH">High</option>
+                    <option value="CRITICAL">Critical</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1">
+                    Assignee
+                  </label>
+                  <select
+                    value={taskAssigneeId}
+                    onChange={(e) => setTaskAssigneeId(e.target.value)}
+                    className="w-full text-xs font-medium px-3 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                  >
+                    <option value="">Unassigned</option>
+                    {project.members.map((m) => (
+                      <option key={m.userId} value={m.userId}>
+                        {m.user.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1">
+                  Due Date
+                </label>
+                <input
+                  type="date"
+                  value={taskDueDate}
+                  onChange={(e) => setTaskDueDate(e.target.value)}
+                  className="w-full text-xs font-medium px-3 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateTaskModal(false)}
+                  className="px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-100 rounded-xl"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={createTaskMutation.isPending}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-5 py-2 rounded-xl transition shadow-sm"
+                >
+                  {createTaskMutation.isPending ? 'Creating...' : 'Create Task'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─── TASK DETAIL MODAL ──────────────────────────────────────── */}
+      {selectedTask && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl relative animate-in fade-in zoom-in-95 space-y-4">
+            <button
+              onClick={() => setSelectedTask(null)}
+              className="absolute top-5 right-5 text-gray-400 hover:text-gray-600"
+            >
+              <X size={20} />
+            </button>
+
+            <div>
+              <span
+                className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border ${
+                  PRIORITY_BADGES[selectedTask.priority]?.bg
+                }`}
+              >
+                {selectedTask.priority}
+              </span>
+              <h3 className="text-lg font-bold text-gray-900 mt-2">{selectedTask.title}</h3>
+              <p className="text-xs text-gray-500 mt-1 leading-relaxed">
+                {selectedTask.description || 'No description provided.'}
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 pt-2 text-xs">
+              <div className="p-3 bg-gray-50 rounded-xl space-y-1">
+                <span className="text-gray-400 uppercase font-semibold text-[10px]">Status</span>
+                <select
+                  value={selectedTask.status}
+                  onChange={(e) => {
+                    updateStatusMutation.mutate({
+                      taskId: selectedTask.id,
+                      status: e.target.value,
+                    });
+                    setSelectedTask({
+                      ...selectedTask,
+                      status: e.target.value as typeof selectedTask.status,
+                    });
+                  }}
+                  className="w-full text-xs font-semibold bg-white border border-gray-200 rounded-lg px-2 py-1 focus:outline-none"
+                >
+                  <option value="TODO">To Do</option>
+                  <option value="IN_PROGRESS">In Progress</option>
+                  <option value="IN_REVIEW">In Review</option>
+                  <option value="DONE">Done</option>
+                </select>
+              </div>
+
+              <div className="p-3 bg-gray-50 rounded-xl space-y-1">
+                <span className="text-gray-400 uppercase font-semibold text-[10px]">Assignee</span>
+                <p className="font-semibold text-gray-800">
+                  {selectedTask.assignee ? selectedTask.assignee.name : 'Unassigned'}
+                </p>
+              </div>
+
+              {selectedTask.dueDate && (
+                <div className="p-3 bg-gray-50 rounded-xl space-y-1">
+                  <span className="text-gray-400 uppercase font-semibold text-[10px]">Due Date</span>
+                  <p className={`font-semibold ${selectedTask.isOverdue ? 'text-red-600' : 'text-gray-800'}`}>
+                    {formatDate(selectedTask.dueDate)} {selectedTask.isOverdue && '(Overdue)'}
+                  </p>
+                </div>
+              )}
+
+              <div className="p-3 bg-gray-50 rounded-xl space-y-1">
+                <span className="text-gray-400 uppercase font-semibold text-[10px]">Created At</span>
+                <p className="font-semibold text-gray-800">{formatDate(selectedTask.createdAt)}</p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+              <button
+                onClick={() => {
+                  if (confirm('Delete this task?')) {
+                    deleteTaskMutation.mutate(selectedTask.id);
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-red-600 hover:bg-red-50 px-3 py-1.5 rounded-lg border border-red-200 transition"
+              >
+                <Trash2 size={13} /> Delete Task
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSelectedTask(null)}
+                className="px-4 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 rounded-xl"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── EDIT PROJECT MODAL ─────────────────────────────────────── */}
       {showEditModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl relative animate-in fade-in zoom-in-95">
@@ -718,7 +1206,7 @@ export default function ProjectDetailPage({
         </div>
       )}
 
-      {/* Add Member Modal */}
+      {/* ─── ADD MEMBER MODAL ───────────────────────────────────────── */}
       {showAddMemberModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl relative animate-in fade-in zoom-in-95">
@@ -817,7 +1305,7 @@ export default function ProjectDetailPage({
         </div>
       )}
 
-      {/* Delete Project Confirmation Modal */}
+      {/* ─── DELETE PROJECT MODAL ───────────────────────────────────── */}
       {showDeleteModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl relative animate-in fade-in zoom-in-95">
@@ -832,7 +1320,7 @@ export default function ProjectDetailPage({
             </div>
             <h3 className="text-lg font-bold text-gray-900 mb-1">Delete Project</h3>
             <p className="text-sm text-gray-500 mb-6">
-              Are you sure you want to permanently delete <strong>{project.name}</strong>? All project data and memberships will be removed. This action cannot be undone.
+              Are you sure you want to permanently delete <strong>{project.name}</strong>? All project data, tasks, and memberships will be removed. This action cannot be undone.
             </p>
 
             <div className="flex items-center justify-end gap-3">

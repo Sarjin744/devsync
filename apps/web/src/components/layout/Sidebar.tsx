@@ -7,6 +7,7 @@ import { cn, getInitials } from '@/lib/utils';
 import {
   LayoutDashboard,
   FolderKanban,
+  CheckSquare,
   Bell,
   Users,
   Mail,
@@ -18,9 +19,10 @@ import {
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/tasks', label: 'My Tasks', icon: CheckSquare },
+  { href: '/projects', label: 'Projects', icon: FolderKanban },
   { href: '/teams', label: 'Teams', icon: Users },
   { href: '/invitations', label: 'Invitations', icon: Mail },
-  { href: '/projects', label: 'Projects', icon: FolderKanban },
   { href: '/notifications', label: 'Notifications', icon: Bell },
   { href: '/search', label: 'Search', icon: Search },
 ];

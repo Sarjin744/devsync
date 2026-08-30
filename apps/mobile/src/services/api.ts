@@ -126,6 +126,7 @@ export const api = {
 
   // Tasks
   getTasks: (projectId: string) => request(`/api/tasks?projectId=${projectId}`),
+  getMyTasks: () => request('/api/tasks/my'),
   getTask: (id: string) => request(`/api/tasks/${id}`),
   createTask: (body: object) =>
     request('/api/tasks', { method: 'POST', body: JSON.stringify(body) }),
