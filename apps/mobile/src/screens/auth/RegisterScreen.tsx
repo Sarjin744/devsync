@@ -22,26 +22,40 @@ export default function RegisterScreen({ navigation }: { navigation: { navigate:
   const [isLoading, setIsLoading] = useState(false);
 
   const handleRegister = async () => {
-    if (!name.trim() || !email.trim() || !password.trim()) {
-      Alert.alert('Error', 'Please fill in all fields');
+    if (!name.trim() || !email.trim() || !password) {
+      Alert.alert('Validation Error', 'Please fill in all fields');
       return;
     }
 
     if (password !== confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match');
+      Alert.alert('Validation Error', 'Passwords do not match');
       return;
     }
 
     if (password.length < 8) {
-      Alert.alert('Error', 'Password must be at least 8 characters');
+      Alert.alert('Password Too Short', 'Password must be at least 8 characters long.');
+      return;
+    }
+
+    if (!/[A-Z]/.test(password)) {
+      Alert.alert('Invalid Password', 'Password must contain at least one uppercase letter (A-Z).');
+      return;
+    }
+
+    if (!/[0-9]/.test(password)) {
+      Alert.alert('Invalid Password', 'Password must contain at least one number (0-9).');
       return;
     }
 
     setIsLoading(true);
     try {
       await register(name.trim(), email.trim().toLowerCase(), password);
-    } catch (error) {
-      Alert.alert('Registration Failed', (error as Error).message);
+    } catch (error: any) {
+      const errorMsg =
+        error?.message ||
+        error?.error ||
+        'Registration failed. Please check your backend connection.';
+      Alert.alert('Registration Failed', errorMsg);
     } finally {
       setIsLoading(false);
     }
@@ -67,7 +81,7 @@ export default function RegisterScreen({ navigation }: { navigation: { navigate:
           {([
             { label: 'Full Name', value: name, setter: setName, placeholder: 'John Doe', type: 'default' as const, secure: false },
             { label: 'Email', value: email, setter: setEmail, placeholder: 'your@email.com', type: 'email-address' as const, secure: false },
-            { label: 'Password', value: password, setter: setPassword, placeholder: '••••••••', type: 'default' as const, secure: true },
+            { label: 'Password', value: password, setter: setPassword, placeholder: 'Min 8 chars, 1 uppercase, 1 number', type: 'default' as const, secure: true },
             { label: 'Confirm Password', value: confirmPassword, setter: setConfirmPassword, placeholder: '••••••••', type: 'default' as const, secure: true },
           ]).map(({ label, value, setter, placeholder, type, secure }) => (
             <View key={label} style={styles.inputGroup}>
@@ -84,6 +98,10 @@ export default function RegisterScreen({ navigation }: { navigation: { navigate:
               />
             </View>
           ))}
+
+          <Text style={styles.helperText}>
+            Password must be at least 8 characters with 1 uppercase letter and 1 number.
+          </Text>
 
           <TouchableOpacity
             style={[styles.button, isLoading && styles.buttonDisabled]}
@@ -148,12 +166,18 @@ const styles = StyleSheet.create({
     color: '#111827',
     backgroundColor: '#f9fafb',
   },
+  helperText: {
+    fontSize: 12,
+    color: '#9ca3af',
+    marginBottom: 14,
+    lineHeight: 16,
+  },
   button: {
     backgroundColor: '#6366f1',
     borderRadius: 10,
     paddingVertical: 14,
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: 4,
   },
   buttonDisabled: { backgroundColor: '#a5b4fc' },
   buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
