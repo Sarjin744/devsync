@@ -27,10 +27,13 @@ async function refreshAccessToken(): Promise<string | null> {
     if (!response.ok) return null;
 
     const data = await response.json();
-    if (data.success && data.data?.tokens) {
-      await AsyncStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, data.data.tokens.accessToken);
-      await AsyncStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, data.data.tokens.refreshToken);
-      return data.data.tokens.accessToken;
+    if (data.success && data.data) {
+      const accessToken = data.data.accessToken || data.data.tokens?.accessToken;
+      const newRefreshToken = data.data.refreshToken || data.data.tokens?.refreshToken;
+
+      if (accessToken) await AsyncStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, accessToken);
+      if (newRefreshToken) await AsyncStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, newRefreshToken);
+      return accessToken ?? null;
     }
     return null;
   } catch {

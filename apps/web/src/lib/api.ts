@@ -35,9 +35,16 @@ apiClient.interceptors.response.use(
           refreshToken,
         });
 
-        const { accessToken, refreshToken: newRefreshToken } = response.data.data.tokens;
-        localStorage.setItem('devsync_access_token', accessToken);
-        localStorage.setItem('devsync_refresh_token', newRefreshToken);
+        const tokenData = response.data.data;
+        const accessToken = tokenData.accessToken || tokenData.tokens?.accessToken;
+        const newRefreshToken = tokenData.refreshToken || tokenData.tokens?.refreshToken;
+
+        if (accessToken) {
+          localStorage.setItem('devsync_access_token', accessToken);
+        }
+        if (newRefreshToken) {
+          localStorage.setItem('devsync_refresh_token', newRefreshToken);
+        }
 
         originalRequest.headers.Authorization = `Bearer ${accessToken}`;
         return apiClient(originalRequest);

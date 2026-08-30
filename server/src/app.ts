@@ -41,7 +41,7 @@ app.use(
 );
 
 // ─── Rate Limiting ───────────────────────────────────────────
-const limiter = rateLimit({
+const apiLimiter = rateLimit({
   windowMs: env.RATE_LIMIT_WINDOW_MS,
   max: env.RATE_LIMIT_MAX_REQUESTS,
   standardHeaders: true,
@@ -52,7 +52,19 @@ const limiter = rateLimit({
   },
 });
 
-app.use('/api/', limiter);
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: env.isProduction ? 30 : 500, // Stricter in production to prevent brute-force attacks
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    error: 'Too many authentication attempts, please try again after 15 minutes.',
+  },
+});
+
+app.use('/api/', apiLimiter);
+app.use('/api/auth/', authLimiter);
 
 // ─── Body Parsing ────────────────────────────────────────────
 app.use(express.json({ limit: '10mb' }));

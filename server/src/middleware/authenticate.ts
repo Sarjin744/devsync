@@ -1,21 +1,18 @@
 import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
-import { env } from '../config/env';
+import { verifyAccessToken } from '../utils/jwt';
 import { UnauthorizedError } from '../utils/errors';
-import { prisma } from '../config/database';
+import { prisma } from '../config/prisma';
 
 export interface AuthenticatedRequest extends Request {
   userId: string;
   userEmail: string;
 }
 
-interface JwtPayload {
-  userId: string;
-  email: string;
-  iat: number;
-  exp: number;
-}
-
+/**
+ * Enforces JWT Bearer authentication on protected endpoints.
+ * Validates the token, ensures the user still exists in the database,
+ * and attaches userId and userEmail to the request.
+ */
 export async function authenticate(
   req: Request,
   _res: Response,
@@ -28,15 +25,13 @@ export async function authenticate(
   }
 
   const token = authHeader.split(' ')[1];
-
-  let payload: JwtPayload;
-  try {
-    payload = jwt.verify(token, env.JWT_SECRET) as JwtPayload;
-  } catch {
-    throw new UnauthorizedError('Invalid or expired access token');
+  if (!token) {
+    throw new UnauthorizedError('Access token is required');
   }
 
-  // Verify user still exists
+  const payload = verifyAccessToken(token);
+
+  // Verify that the user still exists in the database
   const user = await prisma.user.findUnique({
     where: { id: payload.userId },
     select: { id: true, email: true },
@@ -53,7 +48,8 @@ export async function authenticate(
 }
 
 /**
- * Optional authentication — attaches user if token is present, but does not block.
+ * Optional authentication — attaches user credentials if a valid token is present,
+ * but allows unauthenticated requests to proceed.
  */
 export async function optionalAuthenticate(
   req: Request,
@@ -66,13 +62,18 @@ export async function optionalAuthenticate(
     return;
   }
 
+  const token = authHeader.split(' ')[1];
+  if (!token) {
+    next();
+    return;
+  }
+
   try {
-    const token = authHeader.split(' ')[1];
-    const payload = jwt.verify(token, env.JWT_SECRET) as JwtPayload;
+    const payload = verifyAccessToken(token);
     (req as AuthenticatedRequest).userId = payload.userId;
     (req as AuthenticatedRequest).userEmail = payload.email;
   } catch {
-    // Token invalid — proceed without user
+    // Token invalid or expired — proceed as unauthenticated without failing
   }
 
   next();

@@ -59,25 +59,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (email: string, password: string) => {
     const response = await api.login({ email, password }) as {
       user: UserPublic;
-      tokens: { accessToken: string; refreshToken: string };
+      accessToken?: string;
+      refreshToken?: string;
+      tokens?: { accessToken: string; refreshToken: string };
     };
 
-    await AsyncStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, response.tokens.accessToken);
-    await AsyncStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, response.tokens.refreshToken);
-    await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(response.user));
-    setUser(response.user);
+    const accessToken = response.accessToken || response.tokens?.accessToken;
+    const refreshToken = response.refreshToken || response.tokens?.refreshToken;
+
+    if (accessToken) await AsyncStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, accessToken);
+    if (refreshToken) await AsyncStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, refreshToken);
+    if (response.user) {
+      await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(response.user));
+      setUser(response.user);
+    }
   };
 
   const register = async (name: string, email: string, password: string) => {
     const response = await api.register({ name, email, password }) as {
       user: UserPublic;
-      tokens: { accessToken: string; refreshToken: string };
+      accessToken?: string;
+      refreshToken?: string;
+      tokens?: { accessToken: string; refreshToken: string };
     };
 
-    await AsyncStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, response.tokens.accessToken);
-    await AsyncStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, response.tokens.refreshToken);
-    await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(response.user));
-    setUser(response.user);
+    const accessToken = response.accessToken || response.tokens?.accessToken;
+    const refreshToken = response.refreshToken || response.tokens?.refreshToken;
+
+    if (accessToken) await AsyncStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, accessToken);
+    if (refreshToken) await AsyncStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, refreshToken);
+    if (response.user) {
+      await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(response.user));
+      setUser(response.user);
+    }
   };
 
   const logout = async () => {

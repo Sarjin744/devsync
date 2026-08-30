@@ -1,3 +1,6 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
 /**
  * Environment configuration
  * All values are validated at startup to catch missing secrets early.
@@ -6,6 +9,14 @@
 function requireEnv(key: string): string {
   const value = process.env[key];
   if (!value) {
+    if (process.env.NODE_ENV === 'test') {
+      const testDefaults: Record<string, string> = {
+        DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/devsync',
+        JWT_SECRET: 'test-jwt-secret-key-32-chars-long-min',
+        JWT_REFRESH_SECRET: 'test-jwt-refresh-secret-key-32-chars',
+      };
+      if (testDefaults[key]) return testDefaults[key];
+    }
     throw new Error(`Missing required environment variable: ${key}`);
   }
   return value;
@@ -27,11 +38,11 @@ export const env = {
 
   JWT_SECRET: requireEnv('JWT_SECRET'),
   JWT_REFRESH_SECRET: requireEnv('JWT_REFRESH_SECRET'),
-  JWT_ACCESS_EXPIRY: optionalEnv('JWT_ACCESS_EXPIRY', '15m'),
-  JWT_REFRESH_EXPIRY: optionalEnv('JWT_REFRESH_EXPIRY', '7d'),
+  JWT_ACCESS_EXPIRY: optionalEnv('JWT_ACCESS_EXPIRES_IN', optionalEnv('JWT_ACCESS_EXPIRY', '15m')),
+  JWT_REFRESH_EXPIRY: optionalEnv('JWT_REFRESH_EXPIRES_IN', optionalEnv('JWT_REFRESH_EXPIRY', '7d')),
 
   ALLOWED_ORIGINS: parseOrigins(
-    optionalEnv('CLIENT_URL', 'http://localhost:3000,http://localhost:8081'),
+    optionalEnv('WEB_ORIGIN', optionalEnv('CLIENT_URL', 'http://localhost:3000,http://localhost:8081')),
   ),
 
   STORAGE_PROVIDER: optionalEnv('STORAGE_PROVIDER', 'local') as 'local' | 'cloudinary',

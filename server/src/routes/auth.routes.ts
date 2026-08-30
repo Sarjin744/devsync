@@ -9,13 +9,13 @@ import {
   getCurrentUser,
   changePassword,
 } from '../controllers/auth.controller';
-import { authenticate } from '../middleware/authenticate';
+import { authenticate, optionalAuthenticate } from '../middleware/authenticate';
 
 /**
  * @swagger
  * tags:
  *   name: Auth
- *   description: Authentication endpoints
+ *   description: Authentication and session management endpoints
  */
 
 const router = Router();
@@ -26,7 +26,6 @@ const router = Router();
  *   post:
  *     tags: [Auth]
  *     summary: Register a new user
- *     security: []
  */
 router.post('/register', validate({ body: registerSchema }), register);
 
@@ -35,14 +34,44 @@ router.post('/register', validate({ body: registerSchema }), register);
  * /api/auth/login:
  *   post:
  *     tags: [Auth]
- *     summary: Login with email and password
- *     security: []
+ *     summary: Authenticate user with credentials
  */
 router.post('/login', validate({ body: loginSchema }), login);
 
-router.post('/logout', authenticate, logout);
+/**
+ * @swagger
+ * /api/auth/refresh:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Rotate and refresh access token
+ */
 router.post('/refresh', validate({ body: refreshTokenSchema }), refreshToken);
+
+/**
+ * @swagger
+ * /api/auth/logout:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Revoke session and logout
+ */
+router.post('/logout', optionalAuthenticate, logout);
+
+/**
+ * @swagger
+ * /api/auth/me:
+ *   get:
+ *     tags: [Auth]
+ *     summary: Get currently authenticated user
+ */
 router.get('/me', authenticate, getCurrentUser);
+
+/**
+ * @swagger
+ * /api/auth/change-password:
+ *   put:
+ *     tags: [Auth]
+ *     summary: Update password for current user
+ */
 router.put('/change-password', authenticate, changePassword);
 
 export default router;

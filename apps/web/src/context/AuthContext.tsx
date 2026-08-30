@@ -60,22 +60,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = async (email: string, password: string) => {
     const response = await apiClient.post('/api/auth/login', { email, password });
-    const { user: loggedInUser, tokens } = response.data.data;
+    const data = response.data.data;
+    const loggedInUser = data.user;
+    const accessToken = data.accessToken || data.tokens?.accessToken;
+    const refreshToken = data.refreshToken || data.tokens?.refreshToken;
 
-    localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, tokens.accessToken);
-    localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, tokens.refreshToken);
-    localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(loggedInUser));
-    setUser(loggedInUser as UserPublic);
+    if (accessToken) localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, accessToken);
+    if (refreshToken) localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, refreshToken);
+    if (loggedInUser) {
+      localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(loggedInUser));
+      setUser(loggedInUser as UserPublic);
+    }
   };
 
   const register = async (name: string, email: string, password: string) => {
     const response = await apiClient.post('/api/auth/register', { name, email, password });
-    const { user: newUser, tokens } = response.data.data;
+    const data = response.data.data;
+    const newUser = data.user;
+    const accessToken = data.accessToken || data.tokens?.accessToken;
+    const refreshToken = data.refreshToken || data.tokens?.refreshToken;
 
-    localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, tokens.accessToken);
-    localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, tokens.refreshToken);
-    localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(newUser));
-    setUser(newUser as UserPublic);
+    if (accessToken) localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, accessToken);
+    if (refreshToken) localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, refreshToken);
+    if (newUser) {
+      localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(newUser));
+      setUser(newUser as UserPublic);
+    }
   };
 
   const logout = async () => {

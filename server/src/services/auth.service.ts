@@ -1,8 +1,12 @@
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
 import { prisma } from '../config/prisma';
-import { env } from '../config/env';
 import { ConflictError, UnauthorizedError, NotFoundError } from '../utils/errors';
+import { hashPassword, comparePassword } from '../utils/password';
+import {
+  generateAccessToken,
+  generateRefreshToken,
+  verifyRefreshToken,
+  hashToken,
+} from '../utils/jwt';
 import type { RegisterInput, LoginInput } from '../validators/auth.validator';
 
 const USER_SELECT = {
@@ -16,42 +20,34 @@ const USER_SELECT = {
   updatedAt: true,
 } as const;
 
-function generateAccessToken(userId: string, email: string): string {
-  return jwt.sign({ userId, email }, env.JWT_SECRET, {
-    expiresIn: env.JWT_ACCESS_EXPIRY,
-  } as jwt.SignOptions);
-}
-
-function generateRefreshToken(userId: string): string {
-  return jwt.sign({ userId }, env.JWT_REFRESH_SECRET, {
-    expiresIn: env.JWT_REFRESH_EXPIRY,
-  } as jwt.SignOptions);
-}
-
 export async function registerUser(input: RegisterInput) {
-  const existing = await prisma.user.findUnique({ where: { email: input.email } });
+  const normalizedEmail = input.email.trim().toLowerCase();
+
+  const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } });
   if (existing) {
     throw new ConflictError('An account with this email already exists');
   }
 
-  const passwordHash = await bcrypt.hash(input.password, 12);
+  const passwordHash = await hashPassword(input.password);
 
   const user = await prisma.user.create({
     data: {
-      name: input.name,
-      email: input.email,
+      name: input.name.trim(),
+      email: normalizedEmail,
       passwordHash,
+      isOnline: true,
     },
     select: USER_SELECT,
   });
 
-  const accessToken = generateAccessToken(user.id, user.email);
+  const accessToken = generateAccessToken({ userId: user.id, email: user.email });
   const refreshToken = generateRefreshToken(user.id);
+  const tokenHash = hashToken(refreshToken);
 
-  // Store refresh token with tokenHash
+  // Store hashed refresh token in database
   await prisma.refreshToken.create({
     data: {
-      tokenHash: refreshToken,
+      tokenHash,
       userId: user.id,
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     },
@@ -59,76 +55,106 @@ export async function registerUser(input: RegisterInput) {
 
   return {
     user: {
-      ...user,
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      profileImage: user.profileImage,
+      bio: user.bio,
+      isOnline: user.isOnline,
       createdAt: user.createdAt.toISOString(),
       updatedAt: user.updatedAt.toISOString(),
     },
-    tokens: { accessToken, refreshToken },
+    accessToken,
+    refreshToken,
   };
 }
 
 export async function loginUser(input: LoginInput) {
+  const normalizedEmail = input.email.trim().toLowerCase();
+
   const user = await prisma.user.findUnique({
-    where: { email: input.email },
+    where: { email: normalizedEmail },
     select: { ...USER_SELECT, passwordHash: true },
   });
 
+  // Generic error to avoid revealing if email exists
   if (!user) {
     throw new UnauthorizedError('Invalid email or password');
   }
 
-  const isPasswordValid = await bcrypt.compare(input.password, user.passwordHash);
+  const isPasswordValid = await comparePassword(input.password, user.passwordHash);
   if (!isPasswordValid) {
     throw new UnauthorizedError('Invalid email or password');
   }
 
-  const accessToken = generateAccessToken(user.id, user.email);
-  const refreshToken = generateRefreshToken(user.id);
+  // Update online status
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { isOnline: true },
+  });
 
-  // Store refresh token with tokenHash
+  const accessToken = generateAccessToken({ userId: user.id, email: user.email });
+  const refreshToken = generateRefreshToken(user.id);
+  const tokenHash = hashToken(refreshToken);
+
+  // Store hashed refresh token in database
   await prisma.refreshToken.create({
     data: {
-      tokenHash: refreshToken,
+      tokenHash,
       userId: user.id,
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     },
   });
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { passwordHash: _ph, ...userWithoutPassword } = user;
+  const { passwordHash: _ph, ...safeUser } = user;
 
   return {
     user: {
-      ...userWithoutPassword,
-      createdAt: userWithoutPassword.createdAt.toISOString(),
-      updatedAt: userWithoutPassword.updatedAt.toISOString(),
+      id: safeUser.id,
+      name: safeUser.name,
+      email: safeUser.email,
+      profileImage: safeUser.profileImage,
+      bio: safeUser.bio,
+      isOnline: true,
+      createdAt: safeUser.createdAt.toISOString(),
+      updatedAt: safeUser.updatedAt.toISOString(),
     },
-    tokens: { accessToken, refreshToken },
+    accessToken,
+    refreshToken,
   };
 }
 
-export async function logoutUser(userId: string): Promise<void> {
-  // Invalidate all refresh tokens for this user
-  await prisma.refreshToken.deleteMany({ where: { userId } });
-
-  await prisma.user.update({
-    where: { id: userId },
-    data: { isOnline: false },
-  });
-}
-
-export async function refreshAccessToken(token: string) {
-  let payload: { userId: string };
-  try {
-    payload = jwt.verify(token, env.JWT_REFRESH_SECRET) as { userId: string };
-  } catch {
-    throw new UnauthorizedError('Invalid or expired refresh token');
+export async function logoutUser(userId?: string, refreshToken?: string): Promise<void> {
+  if (refreshToken) {
+    const tokenHash = hashToken(refreshToken);
+    await prisma.refreshToken.deleteMany({
+      where: { tokenHash },
+    });
   }
 
-  const stored = await prisma.refreshToken.findFirst({
-    where: { tokenHash: token, userId: payload.userId },
+  if (userId) {
+    // If no specific refreshToken provided, delete all user tokens
+    if (!refreshToken) {
+      await prisma.refreshToken.deleteMany({ where: { userId } });
+    }
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: { isOnline: false },
+    }).catch(() => null);
+  }
+}
+
+export async function refreshAccessToken(refreshToken: string) {
+  const payload = verifyRefreshToken(refreshToken);
+  const tokenHash = hashToken(refreshToken);
+
+  const stored = await prisma.refreshToken.findUnique({
+    where: { tokenHash },
   });
 
+  // Check if token exists, is not expired, and is not revoked
   if (!stored || stored.expiresAt < new Date() || stored.revokedAt) {
     throw new UnauthorizedError('Refresh token expired or revoked. Please log in again.');
   }
@@ -142,21 +168,26 @@ export async function refreshAccessToken(token: string) {
     throw new NotFoundError('User');
   }
 
-  // Rotate refresh token
+  // Token rotation: Revoke / delete previous refresh token
   await prisma.refreshToken.delete({ where: { id: stored.id } });
 
-  const newAccessToken = generateAccessToken(user.id, user.email);
+  // Issue new access token and new rotated refresh token
+  const newAccessToken = generateAccessToken({ userId: user.id, email: user.email });
   const newRefreshToken = generateRefreshToken(user.id);
+  const newTokenHash = hashToken(newRefreshToken);
 
   await prisma.refreshToken.create({
     data: {
-      tokenHash: newRefreshToken,
+      tokenHash: newTokenHash,
       userId: user.id,
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     },
   });
 
-  return { accessToken: newAccessToken, refreshToken: newRefreshToken };
+  return {
+    accessToken: newAccessToken,
+    refreshToken: newRefreshToken,
+  };
 }
 
 export async function getCurrentUser(userId: string) {
@@ -167,10 +198,13 @@ export async function getCurrentUser(userId: string) {
 
   if (!user) throw new NotFoundError('User');
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { passwordHash: _ph, ...safeUser } = user as unknown as { passwordHash?: string; [key: string]: unknown };
+
   return {
-    ...user,
-    createdAt: user.createdAt.toISOString(),
-    updatedAt: user.updatedAt.toISOString(),
+    ...safeUser,
+    createdAt: (user.createdAt as Date).toISOString(),
+    updatedAt: (user.updatedAt as Date).toISOString(),
   };
 }
 
@@ -186,15 +220,15 @@ export async function changePassword(
 
   if (!user) throw new NotFoundError('User');
 
-  const isValid = await bcrypt.compare(currentPassword, user.passwordHash);
+  const isValid = await comparePassword(currentPassword, user.passwordHash);
   if (!isValid) throw new UnauthorizedError('Current password is incorrect');
 
-  const newHash = await bcrypt.hash(newPassword, 12);
+  const newHash = await hashPassword(newPassword);
   await prisma.user.update({
     where: { id: userId },
     data: { passwordHash: newHash },
   });
 
-  // Invalidate all refresh tokens
+  // Invalidate all active sessions upon password change
   await prisma.refreshToken.deleteMany({ where: { userId } });
 }

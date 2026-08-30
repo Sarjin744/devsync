@@ -9,12 +9,12 @@ export class AppError extends Error {
 
   constructor(message: string, statusCode = 500, isOperational = true) {
     super(message);
-    this.name = 'AppError';
+    this.name = this.constructor.name;
     this.statusCode = statusCode;
     this.isOperational = isOperational;
 
-    // Restore prototype chain
-    Object.setPrototypeOf(this, AppError.prototype);
+    // Restore prototype chain properly for derived classes
+    Object.setPrototypeOf(this, new.target.prototype);
     Error.captureStackTrace(this, this.constructor);
   }
 }

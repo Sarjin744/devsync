@@ -6,7 +6,7 @@ import { changePasswordSchema } from '../validators/auth.validator';
 
 export async function register(req: Request, res: Response): Promise<void> {
   const result = await AuthService.registerUser(req.body);
-  sendCreated(res, result, 'Account created successfully');
+  sendCreated(res, result, 'Registration successful');
 }
 
 export async function login(req: Request, res: Response): Promise<void> {
@@ -16,14 +16,15 @@ export async function login(req: Request, res: Response): Promise<void> {
 
 export async function logout(req: Request, res: Response): Promise<void> {
   const userId = (req as AuthenticatedRequest).userId;
-  await AuthService.logoutUser(userId);
+  const refreshToken = (req.body as { refreshToken?: string })?.refreshToken;
+  await AuthService.logoutUser(userId, refreshToken);
   sendSuccess(res, null, 'Logged out successfully');
 }
 
 export async function refreshToken(req: Request, res: Response): Promise<void> {
-  const { refreshToken } = req.body as { refreshToken: string };
-  const tokens = await AuthService.refreshAccessToken(refreshToken);
-  sendSuccess(res, tokens, 'Token refreshed');
+  const { refreshToken: token } = req.body as { refreshToken: string };
+  const tokens = await AuthService.refreshAccessToken(token);
+  sendSuccess(res, tokens, 'Token refreshed successfully');
 }
 
 export async function getCurrentUser(req: Request, res: Response): Promise<void> {

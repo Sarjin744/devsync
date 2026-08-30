@@ -274,41 +274,80 @@ npm run db:studio
 
 ---
 
-## 📡 API Reference
+## 🔐 Authentication & Security Architecture
 
-Full API documentation available at `/api/docs` (Swagger UI).
+DevSync implements a multi-tier stateless JWT authentication pipeline backed by PostgreSQL and Prisma:
 
-### Key endpoints
+```
+Client (Web / Mobile)
+       │
+       ├─── 1. POST /api/auth/login (email + password)
+       │         │
+       │         ▼
+       │    Bcrypt Password Verification
+       │         │
+       │         ▼
+       │    Generate Access Token (15m) + Refresh Token (7d)
+       │    Store SHA-256 Hashed Refresh Token in PostgreSQL
+       │         │
+       │         ▼
+       │    Returns { user, accessToken, refreshToken }
+       │
+       ├─── 2. Protected Request with Authorization: Bearer <accessToken>
+       │         │
+       │         ▼
+       │    `authenticate` Middleware verifies JWT signature & expiry
+       │
+       └─── 3. On 401 Expiry -> POST /api/auth/refresh (refreshToken)
+                 │
+                 ▼
+            Rotate Token: Revoke old token & issue new token pair
+```
 
-| Endpoint | Description |
-|----------|-------------|
-| `POST /api/auth/register` | Register new user |
-| `POST /api/auth/login` | Login |
-| `POST /api/auth/refresh` | Refresh access token |
-| `GET /api/auth/me` | Current user |
-| `GET /api/projects` | List user's projects |
-| `POST /api/projects` | Create project |
-| `GET /api/tasks?projectId=` | Get project tasks |
-| `PATCH /api/tasks/:id/status` | Update task status |
-| `GET /api/notifications` | List notifications |
-| `GET /api/dashboard` | Dashboard stats |
-| `GET /api/search?q=` | Search projects/tasks/users |
+### Key Security Mechanisms
+
+1. **Password Protection**: Passwords are never stored in plaintext. They are salted and hashed using **bcrypt (12 rounds)** before storage.
+2. **Access Token Lifespan**: Signed JWTs with short expiry (`JWT_ACCESS_EXPIRES_IN=15m`) carrying minimal claims (`userId`, `email`).
+3. **Refresh Token Rotation**: Refresh tokens are rotated on each `/api/auth/refresh` call. Replay attacks are mitigated by invalidating previous tokens.
+4. **Hashed Database Storage**: Only **SHA-256 hashes** of refresh tokens are stored in the `RefreshToken` table.
+5. **Idempotent Session Revocation**: `/api/auth/logout` deletes active refresh token hashes and clears offline presence.
+6. **No Information Leakage**: Login endpoint returns generic `"Invalid email or password"` errors to prevent user enumeration attacks.
+7. **Rate Limiting**: Brute-force protection on `/api/auth/` routes limiting login/register attempts per IP window.
+8. **RBAC Foundation**: `authorize.ts` middleware provides role hierarchy verification (`OWNER` > `TEAM_LEAD` > `DEVELOPER` > `VIEWER`).
+
+### Authentication Endpoints
+
+| Method | Endpoint | Access | Description |
+|---|---|---|---|
+| `POST` | `/api/auth/register` | Public | Register new user account with hashed password |
+| `POST` | `/api/auth/login` | Public | Authenticate user credentials & issue token pair |
+| `POST` | `/api/auth/refresh` | Public | Rotate refresh token & issue new access token |
+| `POST` | `/api/auth/logout` | Optional Auth | Revoke refresh token & close session |
+| `GET` | `/api/auth/me` | Bearer Auth | Fetch authenticated user profile |
+| `PUT` | `/api/auth/change-password` | Bearer Auth | Verify current password and update to new bcrypt hash |
 
 ---
 
-## 🧪 Testing
+## 🧪 Testing Suite
+
+Run the full automated test suite using Jest:
 
 ```bash
 cd server
 npm test
 ```
 
-Tests cover:
-- Authentication (register, login, JWT)
-- Project creation and membership
-- Task CRUD and status changes
-- Comment creation
-- Notification creation
+### Test Coverage (32 Passed Tests)
+
+- **JWT Utilities (`jwt.test.ts`)**: Access token generation, claims validation, refresh token creation, token tampering rejection, and SHA-256 hash determinism.
+- **Password Utilities (`password.test.ts`)**: Bcrypt salt hashing, positive match verification, and negative mismatch rejection.
+- **Validation Schemas (`validation.test.ts`)**: Zod schema validation for register (name, email, password strength), login, and refresh tokens.
+- **Authentication Flows (`auth.test.ts`)**:
+  - `POST /api/auth/register` (success, duplicate 409, invalid email 400, weak password 400, missing fields 400)
+  - `POST /api/auth/login` (success, incorrect password 401, unknown user 401)
+  - `GET /api/auth/me` (valid token 200, missing token 401, malformed token 401, passwordHash exclusion)
+  - `POST /api/auth/refresh` (token rotation 200, revoked token replay rejection 401, expired token 401)
+  - `POST /api/auth/logout` (session revocation, idempotency)
 
 ---
 
