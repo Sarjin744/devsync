@@ -28,6 +28,7 @@ import {
 } from '../controllers/task.controller';
 import { createTaskSchema } from '../validators/task.validator';
 import { getMessages } from '../controllers/message.controller';
+import { getProjectActivity } from '../controllers/activity.controller';
 
 const router = Router();
 
@@ -45,6 +46,9 @@ router.patch('/:projectId/archive', archiveProject); // Compatibility
 router.post('/:projectId/restore', restoreProject);
 router.delete('/:projectId', deleteProject);
 router.post('/:projectId/leave', leaveProject);
+
+// Project Activity
+router.get('/:projectId/activity', getProjectActivity);
 
 // Project Messages / Chat
 router.get('/:projectId/messages', getMessages);

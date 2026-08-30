@@ -20,6 +20,7 @@ import taskRoutes from './routes/task.routes';
 import commentRoutes from './routes/comment.routes';
 import messageRoutes from './routes/message.routes';
 import notificationRoutes from './routes/notification.routes';
+import notificationPreferenceRoutes from './routes/notificationPreference.routes';
 import fileRoutes from './routes/file.routes';
 import activityRoutes from './routes/activity.routes';
 import searchRoutes from './routes/search.routes';
@@ -99,6 +100,8 @@ app.use('/api/tasks', taskRoutes);
 app.use('/api/comments', commentRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/notification-preferences', notificationPreferenceRoutes);
+app.use('/api/notifications/preferences', notificationPreferenceRoutes); // Compatibility
 app.use('/api/files', fileRoutes);
 app.use('/api/activity', activityRoutes);
 app.use('/api/search', searchRoutes);

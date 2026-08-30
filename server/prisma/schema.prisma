@@ -54,12 +54,17 @@ enum InvitationStatus {
 enum NotificationType {
   TASK_ASSIGNED
   TASK_STATUS_CHANGED
-  TASK_COMMENTED
+  TASK_DUE_SOON
+  TASK_OVERDUE
+  PROJECT_INVITATION
   PROJECT_MEMBER_ADDED
   PROJECT_MEMBER_REMOVED
+  PROJECT_ROLE_CHANGED
+  MENTION
+  CHAT_MESSAGE
+  TASK_COMMENTED
   NEW_MESSAGE
   TEAM_MEMBER_JOINED
-  MENTION
 }
 
 // ─── Models ──────────────────────────────────────────────────
@@ -86,10 +91,11 @@ model User {
   assignedTasks       Task[]           @relation("TaskAssignee")
   taskComments        TaskComment[]
   sentMessages        Message[]        @relation("MessageSender")
-  notifications       Notification[]
-  uploadedFiles       File[]           @relation("FileUploader")
-  activities          Activity[]       @relation("UserActivity")
-  refreshTokens       RefreshToken[]
+  notifications           Notification[]
+  notificationPreferences NotificationPreference?
+  uploadedFiles           File[]           @relation("FileUploader")
+  activities              Activity[]       @relation("UserActivity")
+  refreshTokens           RefreshToken[]
 
   @@index([email])
 }
@@ -252,6 +258,9 @@ model Notification {
   type      NotificationType
   title     String           @default("")
   message   String
+  projectId String?
+  taskId    String?
+  actorId   String?
   isRead    Boolean          @default(false)
   createdAt DateTime         @default(now())
 
@@ -261,6 +270,20 @@ model Notification {
   @@index([userId])
   @@index([isRead])
   @@index([createdAt])
+  @@index([userId, isRead, createdAt])
+}
+
+model NotificationPreference {
+  id                 String   @id @default(uuid())
+  userId             String   @unique
+  taskAssignments    Boolean  @default(true)
+  taskUpdates        Boolean  @default(true)
+  projectInvitations Boolean  @default(true)
+  mentions           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model File {
@@ -286,7 +309,11 @@ model Activity {
   projectId   String
   userId      String
   action      String
+  type        String?
   description String
+  entityType  String?
+  entityId    String?
+  metadata    Json?
   createdAt   DateTime @default(now())
 
   // Relationships
@@ -296,6 +323,7 @@ model Activity {
   @@index([projectId])
   @@index([userId])
   @@index([createdAt])
+  @@index([projectId, createdAt])
 }
 
 model RefreshToken {

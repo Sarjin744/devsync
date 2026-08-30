@@ -3,6 +3,9 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
+import { useQuery } from '@tanstack/react-query';
+import apiClient from '@/lib/api';
+import { NotificationBell } from '@/components/notifications/NotificationBell';
 import { cn, getInitials } from '@/lib/utils';
 import {
   LayoutDashboard,
@@ -31,10 +34,19 @@ export function Sidebar() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
 
+  const { data: unreadCount = 0 } = useQuery({
+    queryKey: ['notifications', 'unread-count'],
+    queryFn: async () => {
+      const res = await apiClient.get('/api/notifications/unread-count');
+      return res.data.data?.count ?? 0;
+    },
+    refetchInterval: 30000,
+  });
+
   return (
     <aside className="w-60 min-h-screen bg-white border-r border-gray-100 flex flex-col">
-      {/* Logo */}
-      <div className="p-5 border-b border-gray-100">
+      {/* Logo & Notification Bell */}
+      <div className="p-4 px-5 border-b border-gray-100 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center">
             <span className="text-white text-sm font-bold">DS</span>
@@ -44,6 +56,7 @@ export function Sidebar() {
             <p className="text-xs text-gray-400">Team Platform</p>
           </div>
         </div>
+        <NotificationBell />
       </div>
 
       {/* Navigation */}
@@ -54,6 +67,8 @@ export function Sidebar() {
         <ul className="space-y-0.5">
           {navItems.map(({ href, label, icon: Icon }) => {
             const isActive = pathname === href || pathname.startsWith(`${href}/`);
+            const isNotifications = href === '/notifications';
+
             return (
               <li key={href}>
                 <Link
@@ -65,9 +80,22 @@ export function Sidebar() {
                       : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
                   )}
                 >
-                  <Icon className={cn('w-4.5 h-4.5', isActive ? 'text-indigo-600' : 'text-gray-400 group-hover:text-gray-600')} size={18} />
+                  <Icon
+                    className={cn(
+                      'w-4.5 h-4.5',
+                      isActive ? 'text-indigo-600' : 'text-gray-400 group-hover:text-gray-600',
+                    )}
+                    size={18}
+                  />
                   {label}
-                  {isActive && (
+
+                  {isNotifications && unreadCount > 0 && (
+                    <span className="ml-auto bg-indigo-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                      {unreadCount}
+                    </span>
+                  )}
+
+                  {isActive && !isNotifications && (
                     <ChevronRight className="ml-auto text-indigo-400" size={14} />
                   )}
                 </Link>

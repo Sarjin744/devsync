@@ -80,6 +80,9 @@ export function initializeSocket(server: HttpServer): SocketServer {
   io.on('connection', (socket: Socket) => {
     logger.info(`Socket connected: ${socket.id} (user: ${socket.userName} [${socket.userId}])`);
 
+    // Automatically join private user room for targeted notifications
+    socket.join(`user:${socket.userId}`);
+
     // Register domain handlers
     registerChatHandlers(io, socket);
     registerNotificationHandlers(io, socket);

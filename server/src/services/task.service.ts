@@ -1,6 +1,8 @@
 import { prisma } from '../config/prisma';
 import { ForbiddenError, NotFoundError, BadRequestError } from '../utils/errors';
-import { TaskStatus, TaskPriority, ProjectRole } from '@prisma/client';
+import { TaskStatus, TaskPriority, ProjectRole, NotificationType } from '@prisma/client';
+import { createActivity } from './activity.service';
+import { createNotification } from './notification.service';
 import type { CreateTaskInput, UpdateTaskInput, TaskQueryInput } from '../validators/task.validator';
 
 const USER_SELECT = {
@@ -64,6 +66,29 @@ export async function createTask(
       project: { select: { id: true, name: true } },
     },
   });
+
+  // Log activity
+  createActivity({
+    action: 'TASK_CREATED',
+    description: `Created task "${task.title}"`,
+    projectId,
+    userId,
+    entityType: 'TASK',
+    entityId: task.id,
+  }).catch(() => {});
+
+  // Send notification to assignee if assigned to someone else
+  if (task.assigneeId && task.assigneeId !== userId) {
+    createNotification({
+      userId: task.assigneeId,
+      type: NotificationType.TASK_ASSIGNED,
+      title: 'New Task Assignment',
+      message: `You were assigned to task "${task.title}" in ${project.name}`,
+      projectId: task.projectId,
+      taskId: task.id,
+      actorId: userId,
+    }).catch(() => {});
+  }
 
   return serializeTask(task);
 }
@@ -214,6 +239,29 @@ export async function updateTask(
     },
   });
 
+  // Log activity
+  createActivity({
+    action: 'TASK_UPDATED',
+    description: `Updated task "${updated.title}"`,
+    projectId: task.projectId,
+    userId,
+    entityType: 'TASK',
+    entityId: task.id,
+  }).catch(() => {});
+
+  // Send assignment notification if assignee changed
+  if (data.assigneeId && data.assigneeId !== task.assigneeId && data.assigneeId !== userId) {
+    createNotification({
+      userId: data.assigneeId,
+      type: NotificationType.TASK_ASSIGNED,
+      title: 'Task Assigned',
+      message: `You were assigned to task "${updated.title}" in ${task.project.name}`,
+      projectId: task.projectId,
+      taskId: task.id,
+      actorId: userId,
+    }).catch(() => {});
+  }
+
   return serializeTask(updated);
 }
 
@@ -253,6 +301,45 @@ export async function updateTaskStatus(
     },
   });
 
+  const actionName = status === TaskStatus.DONE ? 'TASK_COMPLETED' : 'TASK_STATUS_CHANGED';
+
+  // Log activity
+  createActivity({
+    action: actionName,
+    description: `Moved task "${updated.title}" to ${status.replace('_', ' ')}`,
+    projectId: task.projectId,
+    userId,
+    entityType: 'TASK',
+    entityId: task.id,
+    metadata: { fromStatus: task.status, toStatus: status },
+  }).catch(() => {});
+
+  // Notify task creator if someone else changed status
+  if (task.creatorId && task.creatorId !== userId) {
+    createNotification({
+      userId: task.creatorId,
+      type: NotificationType.TASK_STATUS_CHANGED,
+      title: 'Task Status Updated',
+      message: `Task "${updated.title}" was moved to ${status.replace('_', ' ')}`,
+      projectId: task.projectId,
+      taskId: task.id,
+      actorId: userId,
+    }).catch(() => {});
+  }
+
+  // Notify assignee if someone else changed status
+  if (task.assigneeId && task.assigneeId !== userId && task.assigneeId !== task.creatorId) {
+    createNotification({
+      userId: task.assigneeId,
+      type: NotificationType.TASK_STATUS_CHANGED,
+      title: 'Task Status Updated',
+      message: `Your task "${updated.title}" was moved to ${status.replace('_', ' ')}`,
+      projectId: task.projectId,
+      taskId: task.id,
+      actorId: userId,
+    }).catch(() => {});
+  }
+
   return serializeTask(updated);
 }
 
@@ -276,6 +363,16 @@ export async function deleteTask(taskId: string, userId: string): Promise<void> 
   if (!isOwner && !isLead && !isCreator) {
     throw new ForbiddenError('Only project owner, team lead, or task creator can delete this task');
   }
+
+  // Log activity before deleting
+  createActivity({
+    action: 'TASK_DELETED',
+    description: `Deleted task "${task.title}"`,
+    projectId: task.projectId,
+    userId,
+    entityType: 'TASK',
+    entityId: task.id,
+  }).catch(() => {});
 
   await prisma.task.delete({ where: { id: taskId } });
 }

@@ -1,6 +1,8 @@
 import { prisma } from '../config/prisma';
 import { ForbiddenError, NotFoundError, ConflictError } from '../utils/errors';
-import { ProjectRole, ProjectStatus } from '@prisma/client';
+import { ProjectRole, ProjectStatus, NotificationType } from '@prisma/client';
+import { createActivity } from './activity.service';
+import { createNotification } from './notification.service';
 import type { CreateProjectInput, UpdateProjectInput, ProjectQueryInput } from '../validators/project.validator';
 
 const USER_SELECT = {
@@ -55,6 +57,16 @@ export async function createProject(
 
     return newProject;
   });
+
+  // Log activity
+  createActivity({
+    action: 'PROJECT_CREATED',
+    description: `Created project "${project.name}"`,
+    projectId: project.id,
+    userId,
+    entityType: 'PROJECT',
+    entityId: project.id,
+  }).catch(() => {});
 
   return getProjectById(project.id, userId);
 }
@@ -239,6 +251,15 @@ export async function archiveProject(projectId: string, userId: string) {
     data: { status: ProjectStatus.ARCHIVED },
   });
 
+  createActivity({
+    action: 'PROJECT_ARCHIVED',
+    description: `Archived project "${project.name}"`,
+    projectId,
+    userId,
+    entityType: 'PROJECT',
+    entityId: projectId,
+  }).catch(() => {});
+
   return getProjectById(projectId, userId);
 }
 
@@ -261,6 +282,15 @@ export async function restoreProject(projectId: string, userId: string) {
     where: { id: projectId },
     data: { status: ProjectStatus.ACTIVE },
   });
+
+  createActivity({
+    action: 'PROJECT_RESTORED',
+    description: `Restored project "${project.name}"`,
+    projectId,
+    userId,
+    entityType: 'PROJECT',
+    entityId: projectId,
+  }).catch(() => {});
 
   return getProjectById(projectId, userId);
 }
@@ -391,6 +421,28 @@ export async function addProjectMember(
     include: { user: { select: USER_SELECT } },
   });
 
+  // Log activity
+  createActivity({
+    action: 'MEMBER_ADDED',
+    description: `Added ${newMember.user.name} to the project`,
+    projectId,
+    userId: requesterId,
+    entityType: 'USER',
+    entityId: data.userId,
+  }).catch(() => {});
+
+  // Notify member
+  if (data.userId !== requesterId) {
+    createNotification({
+      userId: data.userId,
+      type: NotificationType.PROJECT_MEMBER_ADDED,
+      title: 'Added to Project',
+      message: `You were added to project "${project.name}"`,
+      projectId,
+      actorId: requesterId,
+    }).catch(() => {});
+  }
+
   return {
     id: newMember.id,
     projectId: newMember.projectId,
@@ -438,6 +490,28 @@ export async function updateProjectMemberRole(
     include: { user: { select: USER_SELECT } },
   });
 
+  // Log activity
+  createActivity({
+    action: 'MEMBER_ROLE_CHANGED',
+    description: `Changed ${updated.user.name}'s role to ${role}`,
+    projectId,
+    userId: requesterId,
+    entityType: 'USER',
+    entityId: targetUserId,
+  }).catch(() => {});
+
+  // Notify member
+  if (targetUserId !== requesterId) {
+    createNotification({
+      userId: targetUserId,
+      type: NotificationType.PROJECT_ROLE_CHANGED,
+      title: 'Role Updated',
+      message: `Your role in project "${project.name}" was changed to ${role}`,
+      projectId,
+      actorId: requesterId,
+    }).catch(() => {});
+  }
+
   return {
     id: updated.id,
     projectId: updated.projectId,
@@ -479,6 +553,28 @@ export async function removeProjectMember(
 
   const member = project.members.find((m) => m.userId === targetUserId);
   if (!member) throw new NotFoundError('Project member');
+
+  // Log activity
+  createActivity({
+    action: 'MEMBER_REMOVED',
+    description: `Removed member from the project`,
+    projectId,
+    userId: requesterId,
+    entityType: 'USER',
+    entityId: targetUserId,
+  }).catch(() => {});
+
+  // Notify member
+  if (targetUserId !== requesterId) {
+    createNotification({
+      userId: targetUserId,
+      type: NotificationType.PROJECT_MEMBER_REMOVED,
+      title: 'Removed from Project',
+      message: `You were removed from project "${project.name}"`,
+      projectId,
+      actorId: requesterId,
+    }).catch(() => {});
+  }
 
   await prisma.projectMember.delete({ where: { id: member.id } });
 }

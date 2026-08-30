@@ -17,12 +17,17 @@ export type TaskPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 export type NotificationType =
   | 'TASK_ASSIGNED'
   | 'TASK_STATUS_CHANGED'
-  | 'TASK_COMMENTED'
+  | 'TASK_DUE_SOON'
+  | 'TASK_OVERDUE'
+  | 'PROJECT_INVITATION'
   | 'PROJECT_MEMBER_ADDED'
   | 'PROJECT_MEMBER_REMOVED'
+  | 'PROJECT_ROLE_CHANGED'
+  | 'MENTION'
+  | 'CHAT_MESSAGE'
+  | 'TASK_COMMENTED'
   | 'NEW_MESSAGE'
-  | 'TEAM_MEMBER_JOINED'
-  | 'MENTION';
+  | 'TEAM_MEMBER_JOINED';
 
 // ============================================================
 // User types
@@ -42,6 +47,11 @@ export interface UserPublic {
 
 export interface UserProfile extends UserPublic {
   projects: ProjectSummary[];
+  teams?: Array<{
+    id: string;
+    role: TeamRole;
+    team: { id: string; name: string };
+  }>;
 }
 
 // ============================================================
@@ -187,21 +197,52 @@ export interface Message {
 export interface Notification {
   id: string;
   type: NotificationType;
-  title?: string;
+  title: string;
   message: string;
   isRead: boolean;
   userId: string;
+  projectId?: string | null;
+  taskId?: string | null;
+  actorId?: string | null;
+  actor?: UserPublic | null;
   createdAt: string;
+}
+
+export interface NotificationPreferences {
+  taskAssignments: boolean;
+  taskUpdates: boolean;
+  projectInvitations: boolean;
+  mentions: boolean;
 }
 
 // ============================================================
 // Activity types
 // ============================================================
 
+export type ActivityType =
+  | 'PROJECT_CREATED'
+  | 'PROJECT_UPDATED'
+  | 'PROJECT_ARCHIVED'
+  | 'PROJECT_RESTORED'
+  | 'MEMBER_ADDED'
+  | 'MEMBER_REMOVED'
+  | 'MEMBER_ROLE_CHANGED'
+  | 'TASK_CREATED'
+  | 'TASK_UPDATED'
+  | 'TASK_ASSIGNED'
+  | 'TASK_STATUS_CHANGED'
+  | 'TASK_PRIORITY_CHANGED'
+  | 'TASK_COMPLETED'
+  | 'CHAT_MESSAGE';
+
 export interface Activity {
   id: string;
   action: string;
+  type?: string | null;
   description: string;
+  entityType?: string | null;
+  entityId?: string | null;
+  metadata?: Record<string, unknown> | null;
   projectId: string;
   userId: string;
   user: UserPublic;

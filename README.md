@@ -481,6 +481,49 @@ Broadcast to Project Room (message:new)
 
 ---
 
+## 🔔 Notifications & Project Activity Feed (Stage 8)
+
+### 1. Notification Architecture & Flow
+
+```text
+Action Trigger (Task Assigned, Status Shifted, Member Added)
+       ↓
+Notification Service (Preference Filter & Deduplication)
+       ↓
+PostgreSQL Persistence (Prisma Notification Model)
+       ↓
+Socket.IO Delivery to Private User Room (user:userId)
+       ↓
+Client Receives (notification:new & unread count badge update)
+```
+
+### 2. Notification Types & Socket Events
+
+| Notification Type | Trigger Event | Target Recipient |
+|---|---|---|
+| `TASK_ASSIGNED` | Task assignee changed/assigned | Assigned User |
+| `TASK_STATUS_CHANGED` | Task moved across workflow columns | Task Creator & Assignee |
+| `TASK_DUE_SOON` | Task due date within reminder window | Assignee |
+| `TASK_OVERDUE` | Task past due date & incomplete | Assignee |
+| `PROJECT_MEMBER_ADDED` | Member invited/added to project | Target User |
+| `PROJECT_MEMBER_REMOVED`| Member removed from project | Target User |
+| `PROJECT_ROLE_CHANGED` | Member role updated | Target User |
+
+### 3. REST Notification & Activity Endpoints
+
+| Method | Endpoint | Access | Description |
+|---|---|---|---|
+| `GET` | `/api/notifications` | Bearer Auth | List user notifications with pagination & `isRead` filter |
+| `GET` | `/api/notifications/unread-count` | Bearer Auth | Get total unread notifications count |
+| `PATCH` | `/api/notifications/:id/read` | Notification Owner | Mark single notification as read |
+| `PATCH` | `/api/notifications/read-all` | Bearer Auth | Mark all user notifications as read |
+| `DELETE` | `/api/notifications/:id` | Notification Owner | Delete notification |
+| `GET` | `/api/notification-preferences` | Bearer Auth | Get user notification delivery preferences |
+| `PATCH` | `/api/notification-preferences` | Bearer Auth | Update user notification preferences |
+| `GET` | `/api/projects/:projectId/activity` | Project Member | List paginated project activity with action filters |
+
+---
+
 ## 🧪 Testing Suite
 
 Run the full automated test suite using Jest:
@@ -490,7 +533,7 @@ cd server
 npm test
 ```
 
-### Test Coverage (104 Passed Tests)
+### Test Coverage (118 Passed Tests)
 
 - **JWT Utilities (`jwt.test.ts`)**: Access token generation, claims validation, refresh token creation, token tampering rejection, and SHA-256 hash determinism (5 tests).
 - **Password Utilities (`password.test.ts`)**: Bcrypt salt hashing, positive match verification, and negative mismatch rejection (3 tests).
@@ -501,6 +544,8 @@ npm test
 - **Project Management (`project.test.ts`)**: Project creation, team membership validation, project listing, details, member 403 authorization, owner/lead updates, archive, restore, delete, member additions with parent team enforcement, duplicate prevention, role updates, member removal, and leave project safety (20 tests).
 - **Task Management & Kanban (`task.test.ts`)**: Task creation with defaults, validation errors, assignee project membership enforcement, paginated listings with status/priority filters, single task details, role-based updates, status transitions, authorized deletions, and user assigned tasks (17 tests).
 - **Real-Time Chat & Socket.IO (`chat.test.ts`)**: REST message history, 403 outsider rejection, message deletion, Socket JWT authentication, project room joining, 403 non-member room join rejection, real-time message sending and persistence, empty and oversized validation, critical room isolation verification, and typing indicators (11 tests).
+- **Notifications & Preferences (`notification.test.ts`)**: User notification preferences GET/PATCH, paginated notifications list, unread counts, mark read, mark all read, delete, user isolation (403), scheduled due-soon task checks, and overdue task checks with deduplication (9 tests).
+- **Project Activity Feed (`activity.test.ts`)**: Activity feed pagination, filtering by action type, non-member 403 authorization, and structured event metadata (5 tests).
 
 ---
 

@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { ProjectChat } from '@/components/chat/ProjectChat';
+import { ProjectActivityTimeline } from '@/components/activity/ProjectActivityTimeline';
 
 interface ProjectMember {
   id: string;
@@ -897,17 +898,9 @@ export default function ProjectDetailPage({
         </div>
       )}
 
-      {/* ─── TAB 6: ACTIVITY (Placeholder) ──────────────────────────── */}
+      {/* ─── TAB 6: ACTIVITY ──────────────────────────────────────── */}
       {activeTab === 'activity' && (
-        <div className="bg-white rounded-2xl border border-gray-100 p-12 text-center max-w-md mx-auto shadow-sm">
-          <div className="w-14 h-14 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
-            <Activity size={24} />
-          </div>
-          <h3 className="font-semibold text-gray-900 text-lg">Project Activity Log</h3>
-          <p className="text-sm text-gray-500 mt-1 mb-4">
-            Detailed project audit trails and audit logs will be available in Stage 9.
-          </p>
-        </div>
+        <ProjectActivityTimeline projectId={projectId} />
       )}
 
       {/* ─── CREATE TASK MODAL ──────────────────────────────────────── */}

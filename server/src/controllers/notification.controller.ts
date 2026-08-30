@@ -1,14 +1,22 @@
 import { Request, Response } from 'express';
 import { AuthenticatedRequest } from '../middleware/authenticate';
 import * as NotificationService from '../services/notification.service';
-import { sendSuccess, sendNoContent } from '../utils/response';
+import { sendSuccess } from '../utils/response';
 
 export async function getNotifications(req: Request, res: Response): Promise<void> {
   const userId = (req as AuthenticatedRequest).userId;
-  const page = parseInt(req.query.page as string || '1');
-  const limit = parseInt(req.query.limit as string || '20');
-  const notifications = await NotificationService.getUserNotifications(userId, page, limit);
-  sendSuccess(res, notifications);
+  const page = parseInt((req.query.page as string) || '1', 10);
+  const limit = parseInt((req.query.limit as string) || '20', 10);
+  const isRead =
+    req.query.isRead === 'true' ? true : req.query.isRead === 'false' ? false : undefined;
+
+  const result = await NotificationService.getUserNotifications(userId, {
+    page,
+    limit,
+    isRead,
+  });
+
+  sendSuccess(res, result.notifications, undefined, 200, result.pagination);
 }
 
 export async function getUnreadCount(req: Request, res: Response): Promise<void> {
@@ -32,5 +40,5 @@ export async function markAllAsRead(req: Request, res: Response): Promise<void> 
 export async function deleteNotification(req: Request, res: Response): Promise<void> {
   const userId = (req as AuthenticatedRequest).userId;
   await NotificationService.deleteNotification(req.params.notificationId, userId);
-  sendNoContent(res);
+  sendSuccess(res, null, 'Notification deleted successfully');
 }
