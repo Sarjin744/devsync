@@ -2,37 +2,42 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 /**
- * Environment configuration
- * All values are validated at startup to catch missing secrets early.
+ * Centralized Environment Configuration & Validation
+ * Validates required secrets at startup to fail-fast on missing configuration.
  */
 
 function requireEnv(key: string): string {
   const value = process.env[key];
-  if (!value) {
+  if (!value || !value.trim()) {
     if (process.env.NODE_ENV === 'test') {
       const testDefaults: Record<string, string> = {
-        DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/devsync',
-        JWT_SECRET: 'test-jwt-secret-key-32-chars-long-min',
-        JWT_REFRESH_SECRET: 'test-jwt-refresh-secret-key-32-chars',
+        DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/devsync?schema=public',
+        JWT_SECRET: 'test-jwt-secret-key-32-chars-long-min-for-security',
+        JWT_REFRESH_SECRET: 'test-jwt-refresh-secret-key-32-chars-long-for-security',
       };
       if (testDefaults[key]) return testDefaults[key];
     }
-    throw new Error(`Missing required environment variable: ${key}`);
+    throw new Error(`[CRITICAL] Missing required environment variable: ${key}`);
   }
-  return value;
+  return value.trim();
 }
 
 function optionalEnv(key: string, defaultValue: string): string {
-  return process.env[key] ?? defaultValue;
+  const value = process.env[key];
+  return value && value.trim() ? value.trim() : defaultValue;
 }
 
 function parseOrigins(raw: string): string[] {
-  return raw.split(',').map((origin) => origin.trim());
+  return raw
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
 }
 
 export const env = {
   NODE_ENV: optionalEnv('NODE_ENV', 'development'),
   PORT: parseInt(optionalEnv('PORT', '5000'), 10),
+  LOG_LEVEL: optionalEnv('LOG_LEVEL', 'info') as 'info' | 'warn' | 'error' | 'debug',
 
   DATABASE_URL: requireEnv('DATABASE_URL'),
 
@@ -61,12 +66,15 @@ export const env = {
   CLOUDINARY_API_SECRET: optionalEnv('CLOUDINARY_API_SECRET', ''),
 
   RATE_LIMIT_WINDOW_MS: parseInt(optionalEnv('RATE_LIMIT_WINDOW_MS', '900000'), 10),
-  RATE_LIMIT_MAX_REQUESTS: parseInt(optionalEnv('RATE_LIMIT_MAX_REQUESTS', '100'), 10),
+  RATE_LIMIT_MAX_REQUESTS: parseInt(optionalEnv('RATE_LIMIT_MAX_REQUESTS', '300'), 10),
 
   get isProduction() {
     return this.NODE_ENV === 'production';
   },
   get isDevelopment() {
     return this.NODE_ENV === 'development';
+  },
+  get isTest() {
+    return this.NODE_ENV === 'test';
   },
 } as const;

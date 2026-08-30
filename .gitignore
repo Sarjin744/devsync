@@ -62,9 +62,6 @@ expo-env.d.ts
 android/
 ios/
 
-# Prisma
-prisma/migrations/
-
 # Uploads (local development)
 uploads/
 

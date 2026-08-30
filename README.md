@@ -637,7 +637,7 @@ cd server
 npm test
 ```
 
-### Test Coverage (154 Passed Tests)
+### Test Coverage (161 Passed Tests)
 
 - **JWT Utilities (`jwt.test.ts`)**: Access token generation, claims validation, refresh token creation, token tampering rejection, and SHA-256 hash determinism (5 tests).
 - **Password Utilities (`password.test.ts`)**: Bcrypt salt hashing, positive match verification, and negative mismatch rejection (3 tests).
@@ -653,38 +653,65 @@ npm test
 - **File Management & Cloud Storage (`file.test.ts`)**: Multipart file uploads, project membership validation, 400 empty validation, 403 outsider rejection, paginated file listings, single file details, short-lived signed download redirects, role-based file renaming (owner/lead/uploader vs viewer 403), role-based file deletion (storage cleanup + DB record deletion), and cross-project security isolation (16 tests).
 - **Global Search & Discovery (`search.test.ts`)**: Input normalization, min/max length validation, query trimming, individual entity filters (`projects`, `tasks`, `messages`, `files`, `activity`, `users`), global multi-entity aggregation, project-specific search scoping, 403 outsider rejection on unauthorized projects, and mandatory cross-project data leakage prevention (14 tests).
 - **Dashboard & Project Insights (`dashboard.test.ts`)**: Global metrics aggregation, backward-compatible overview endpoint, project task and priority distributions, completion rate calculation, health score and threshold rules, team member workload partitioning (open, completed, overdue), productivity trend generation across date ranges (`7d`, `30d`, `90d`), and 403 outsider rejection on unauthorized project dashboards (6 tests).
+- **Production Hardening & Security (`production.test.ts`)**: Fast Render health check probe (`/health` & `/api/health`), database connection probing, request correlation ID generation and propagation (`X-Request-Id`), HTTP security headers (`Helmet`), and centralized error formatting (7 tests).
 
 ---
 
-## 🚢 Deployment (Render)
+## 🚢 Production Deployment (Render — No Docker Required)
 
-### Backend
+DevSync is natively optimized for seamless, stateless deployment on **Render** (or Railway / Fly.io) without requiring Docker or containerization overhead.
 
-1. Create a **Web Service** on Render
-2. Set build command: `cd server && npm install && npx prisma generate && npm run build`
-3. Set start command: `cd server && npx prisma migrate deploy && node dist/server/src/index.js`
-4. Set environment variables from `.env.example`
+### 1. PostgreSQL Database
 
-### Web
+1. Create a **PostgreSQL** database instance on Render.
+2. Copy the **Internal Database URL** (e.g. `postgresql://user:pass@host:5432/devsync`).
 
-1. Create a **Static Site** or **Web Service** on Render
-2. Set build command: `cd apps/web && npm install && npm run build`
-3. Set start command: `npm start`
-4. Set `NEXT_PUBLIC_API_URL` to your backend Render URL
+### 2. Backend Web Service
+
+1. Create a new **Web Service** on Render connected to your repository.
+2. Configure the service settings:
+   - **Environment**: `Node`
+   - **Root Directory**: `server`
+   - **Build Command**: `npm install && npx prisma generate && npm run build`
+   - **Start Command**: `npx prisma migrate deploy && node dist/index.js`
+   - **Health Check Path**: `/health`
+3. Add Environment Variables:
+   - `NODE_ENV`: `production`
+   - `PORT`: `5000` (Render will inject its own `PORT`)
+   - `DATABASE_URL`: `[Your PostgreSQL URL]`
+   - `JWT_SECRET`: `[Generated 32+ char secret]`
+   - `JWT_REFRESH_SECRET`: `[Generated 32+ char secret]`
+   - `CLIENT_URL`: `https://your-devsync-web.onrender.com`
+   - `STORAGE_PROVIDER`: `s3` (or `r2` / `local`)
+   - `STORAGE_ENDPOINT`: `[Cloudflare R2 / AWS S3 Endpoint]`
+   - `STORAGE_BUCKET`: `[Your Bucket Name]`
+   - `STORAGE_ACCESS_KEY`: `[Your Storage Key]`
+   - `STORAGE_SECRET_KEY`: `[Your Storage Secret]`
+
+### 3. Next.js Web Application
+
+1. Create a new **Web Service** on Render connected to your repository.
+2. Configure the frontend settings:
+   - **Environment**: `Node`
+   - **Root Directory**: `apps/web`
+   - **Build Command**: `npm install && npm run build`
+   - **Start Command**: `npm start`
+3. Add Environment Variables:
+   - `NEXT_PUBLIC_API_URL`: `https://your-devsync-api.onrender.com`
+   - `NEXT_PUBLIC_SOCKET_URL`: `https://your-devsync-api.onrender.com`
 
 ---
 
-## 🔮 Future Improvements
+## 🔒 Production Security Checklist
 
-- [ ] Email verification and password reset
-- [ ] GitHub integration (link PRs to tasks)
-- [ ] Kanban drag-and-drop (DnD kit)
-- [ ] Mentions and @notifications
-- [ ] Dark mode
-- [ ] Export to PDF/CSV
-- [ ] Gantt chart view
-- [ ] Calendar integration
-- [ ] Mobile push notifications (Expo Notifications)
+- [x] **Zero Hardcoded Secrets**: All keys, JWT tokens, and storage credentials loaded strictly from validated environment variables.
+- [x] **Request Tracing**: `X-Request-Id` correlation tokens attached to every HTTP request and response.
+- [x] **HTTP Security Headers**: `Helmet` configured with `Content-Security-Policy`, `Frameguard`, `noSniff`, and `Referrer-Policy`.
+- [x] **Role-Based Authorization & IDOR Protection**: Server-side verification on all project, task, file, message, and activity routes.
+- [x] **Rate Limiting**: Multi-tiered rate limiters for General APIs, Auth, Search, and File uploads.
+- [x] **Stateless Storage**: Cloudflare R2 / AWS S3 abstraction preventing server filesystem lock-in.
+- [x] **Graceful Shutdown**: `SIGTERM` and `SIGINT` signals safely drain HTTP traffic and close Prisma connections.
+- [x] **Automated Test Matrix**: 161 tests covering authentication, RBAC, Socket.IO room isolation, cloud files, search, analytics, and health probes.
 
 ---
 
