@@ -1,6 +1,6 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { prisma } from '../config/database';
+import { prisma } from '../config/prisma';
 import { env } from '../config/env';
 import { ConflictError, UnauthorizedError, NotFoundError } from '../utils/errors';
 import type { RegisterInput, LoginInput } from '../validators/auth.validator';
@@ -9,7 +9,7 @@ const USER_SELECT = {
   id: true,
   name: true,
   email: true,
-  avatar: true,
+  profileImage: true,
   bio: true,
   isOnline: true,
   createdAt: true,
@@ -48,10 +48,10 @@ export async function registerUser(input: RegisterInput) {
   const accessToken = generateAccessToken(user.id, user.email);
   const refreshToken = generateRefreshToken(user.id);
 
-  // Store refresh token
+  // Store refresh token with tokenHash
   await prisma.refreshToken.create({
     data: {
-      token: refreshToken,
+      tokenHash: refreshToken,
       userId: user.id,
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     },
@@ -85,10 +85,10 @@ export async function loginUser(input: LoginInput) {
   const accessToken = generateAccessToken(user.id, user.email);
   const refreshToken = generateRefreshToken(user.id);
 
-  // Store refresh token
+  // Store refresh token with tokenHash
   await prisma.refreshToken.create({
     data: {
-      token: refreshToken,
+      tokenHash: refreshToken,
       userId: user.id,
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     },
@@ -126,11 +126,11 @@ export async function refreshAccessToken(token: string) {
   }
 
   const stored = await prisma.refreshToken.findFirst({
-    where: { token, userId: payload.userId },
+    where: { tokenHash: token, userId: payload.userId },
   });
 
-  if (!stored || stored.expiresAt < new Date()) {
-    throw new UnauthorizedError('Refresh token expired. Please log in again.');
+  if (!stored || stored.expiresAt < new Date() || stored.revokedAt) {
+    throw new UnauthorizedError('Refresh token expired or revoked. Please log in again.');
   }
 
   const user = await prisma.user.findUnique({
@@ -150,7 +150,7 @@ export async function refreshAccessToken(token: string) {
 
   await prisma.refreshToken.create({
     data: {
-      token: newRefreshToken,
+      tokenHash: newRefreshToken,
       userId: user.id,
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     },

@@ -1,10 +1,10 @@
-import { prisma } from '../config/database';
+import { prisma } from '../config/prisma';
 
 const USER_SELECT = {
   id: true,
   name: true,
   email: true,
-  avatar: true,
+  profileImage: true,
   bio: true,
   isOnline: true,
   createdAt: true,

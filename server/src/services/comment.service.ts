@@ -1,4 +1,4 @@
-import { prisma } from '../config/database';
+import { prisma } from '../config/prisma';
 import { ForbiddenError, NotFoundError } from '../utils/errors';
 import { requireProjectMember } from './project.service';
 import { createActivity } from './activity.service';
@@ -8,7 +8,7 @@ const USER_SELECT = {
   id: true,
   name: true,
   email: true,
-  avatar: true,
+  profileImage: true,
   bio: true,
   isOnline: true,
   createdAt: true,
@@ -27,7 +27,7 @@ export async function createComment(
 
   await requireProjectMember(task.projectId, userId);
 
-  const comment = await prisma.comment.create({
+  const comment = await prisma.taskComment.create({
     data: {
       content: data.content,
       taskId: data.taskId,
@@ -37,7 +37,7 @@ export async function createComment(
   });
 
   await createActivity({
-    type: 'COMMENT_ADDED',
+    action: 'COMMENT_ADDED',
     description: `A comment was added to task "${task.title}"`,
     projectId: task.projectId,
     userId,
@@ -46,10 +46,9 @@ export async function createComment(
   if (task.creatorId !== userId) {
     await createNotification({
       type: 'TASK_COMMENTED',
+      title: 'New Comment',
       message: `Someone commented on your task "${task.title}"`,
       userId: task.creatorId,
-      referenceId: data.taskId,
-      referenceType: 'TASK',
     });
   }
 
@@ -74,7 +73,7 @@ export async function getTaskComments(taskId: string, userId: string) {
 
   await requireProjectMember(task.projectId, userId);
 
-  const comments = await prisma.comment.findMany({
+  const comments = await prisma.taskComment.findMany({
     where: { taskId },
     include: { user: { select: USER_SELECT } },
     orderBy: { createdAt: 'asc' },
@@ -93,11 +92,11 @@ export async function getTaskComments(taskId: string, userId: string) {
 }
 
 export async function updateComment(commentId: string, userId: string, content: string) {
-  const comment = await prisma.comment.findUnique({ where: { id: commentId } });
+  const comment = await prisma.taskComment.findUnique({ where: { id: commentId } });
   if (!comment) throw new NotFoundError('Comment');
   if (comment.userId !== userId) throw new ForbiddenError('You can only edit your own comments');
 
-  const updated = await prisma.comment.update({
+  const updated = await prisma.taskComment.update({
     where: { id: commentId },
     data: { content },
     include: { user: { select: USER_SELECT } },
@@ -116,9 +115,9 @@ export async function updateComment(commentId: string, userId: string, content: 
 }
 
 export async function deleteComment(commentId: string, userId: string): Promise<void> {
-  const comment = await prisma.comment.findUnique({ where: { id: commentId } });
+  const comment = await prisma.taskComment.findUnique({ where: { id: commentId } });
   if (!comment) throw new NotFoundError('Comment');
   if (comment.userId !== userId) throw new ForbiddenError('You can only delete your own comments');
 
-  await prisma.comment.delete({ where: { id: commentId } });
+  await prisma.taskComment.delete({ where: { id: commentId } });
 }

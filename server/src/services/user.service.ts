@@ -1,4 +1,4 @@
-import { prisma } from '../config/database';
+import { prisma } from '../config/prisma';
 import { NotFoundError } from '../utils/errors';
 import path from 'path';
 
@@ -6,7 +6,7 @@ const USER_SELECT = {
   id: true,
   name: true,
   email: true,
-  avatar: true,
+  profileImage: true,
   bio: true,
   isOnline: true,
   createdAt: true,
@@ -56,7 +56,7 @@ export async function updateAvatar(
 
   const user = await prisma.user.update({
     where: { id: userId },
-    data: { avatar: avatarUrl },
+    data: { profileImage: avatarUrl },
     select: USER_SELECT,
   });
 
@@ -76,6 +76,7 @@ export async function getUserProjects(userId: string) {
           id: true,
           name: true,
           description: true,
+          teamId: true,
           status: true,
           ownerId: true,
           createdAt: true,

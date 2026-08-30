@@ -1,13 +1,14 @@
-import { prisma } from '../config/database';
+import { prisma } from '../config/prisma';
 import { ForbiddenError, NotFoundError, ConflictError } from '../utils/errors';
 import { createActivity } from './activity.service';
 import { createNotification } from './notification.service';
+import { ProjectRole } from '@prisma/client';
 
 const USER_SELECT = {
   id: true,
   name: true,
   email: true,
-  avatar: true,
+  profileImage: true,
   bio: true,
   isOnline: true,
   createdAt: true,
@@ -18,6 +19,7 @@ const PROJECT_SELECT = {
   id: true,
   name: true,
   description: true,
+  teamId: true,
   status: true,
   ownerId: true,
   createdAt: true,
@@ -26,22 +28,23 @@ const PROJECT_SELECT = {
 
 export async function createProject(
   userId: string,
-  data: { name: string; description?: string },
+  data: { name: string; description?: string; teamId?: string },
 ) {
   const project = await prisma.project.create({
     data: {
       name: data.name,
       description: data.description,
+      teamId: data.teamId ?? null,
       ownerId: userId,
       members: {
-        create: { userId, role: 'OWNER' },
+        create: { userId, role: ProjectRole.OWNER },
       },
     },
     select: PROJECT_SELECT,
   });
 
   await createActivity({
-    type: 'PROJECT_CREATED',
+    action: 'PROJECT_CREATED',
     description: `Project "${project.name}" was created`,
     projectId: project.id,
     userId,
@@ -66,7 +69,7 @@ export async function getUserProjects(userId: string) {
         },
       },
     },
-    orderBy: { joinedAt: 'desc' },
+    orderBy: { createdAt: 'desc' },
   });
 
   return memberships.map((m) => ({
@@ -122,7 +125,7 @@ export async function getProjectById(projectId: string, userId: string) {
     ...serializeProject(project),
     members: project.members.map((m) => ({
       ...m,
-      joinedAt: m.joinedAt.toISOString(),
+      createdAt: m.createdAt.toISOString(),
       user: {
         ...m.user,
         createdAt: m.user.createdAt.toISOString(),
@@ -147,7 +150,7 @@ export async function updateProject(
   });
 
   await createActivity({
-    type: 'PROJECT_UPDATED',
+    action: 'PROJECT_UPDATED',
     description: `Project "${project.name}" was updated`,
     projectId,
     userId,
@@ -176,7 +179,7 @@ export async function deleteProject(projectId: string, userId: string): Promise<
 export async function addMember(
   projectId: string,
   requesterId: string,
-  data: { userId: string; role?: string },
+  data: { userId: string; role?: ProjectRole },
 ) {
   await requireOwnerOrLead(projectId, requesterId);
 
@@ -189,7 +192,7 @@ export async function addMember(
     data: {
       projectId,
       userId: data.userId,
-      role: (data.role as 'OWNER' | 'TEAM_LEAD' | 'DEVELOPER' | 'VIEWER') ?? 'DEVELOPER',
+      role: data.role ?? ProjectRole.DEVELOPER,
     },
     include: { user: { select: USER_SELECT } },
   });
@@ -200,7 +203,7 @@ export async function addMember(
   });
 
   await createActivity({
-    type: 'MEMBER_ADDED',
+    action: 'MEMBER_ADDED',
     description: `A new member was added to "${project?.name}"`,
     projectId,
     userId: requesterId,
@@ -208,15 +211,14 @@ export async function addMember(
 
   await createNotification({
     type: 'PROJECT_MEMBER_ADDED',
+    title: 'Project Invitation',
     message: `You were added to the project "${project?.name}"`,
     userId: data.userId,
-    referenceId: projectId,
-    referenceType: 'PROJECT',
   });
 
   return {
     ...member,
-    joinedAt: member.joinedAt.toISOString(),
+    createdAt: member.createdAt.toISOString(),
     user: {
       ...member.user,
       createdAt: member.user.createdAt.toISOString(),
@@ -245,7 +247,7 @@ export async function removeMember(
   });
 
   await createActivity({
-    type: 'MEMBER_REMOVED',
+    action: 'MEMBER_REMOVED',
     description: `A member was removed from "${project?.name}"`,
     projectId,
     userId: requesterId,
@@ -256,7 +258,7 @@ export async function updateMemberRole(
   projectId: string,
   targetUserId: string,
   requesterId: string,
-  role: string,
+  role: ProjectRole,
 ) {
   await requireOwnerOrLead(projectId, requesterId);
 
@@ -267,13 +269,13 @@ export async function updateMemberRole(
 
   const updated = await prisma.projectMember.update({
     where: { id: member.id },
-    data: { role: role as 'OWNER' | 'TEAM_LEAD' | 'DEVELOPER' | 'VIEWER' },
+    data: { role },
     include: { user: { select: USER_SELECT } },
   });
 
   return {
     ...updated,
-    joinedAt: updated.joinedAt.toISOString(),
+    createdAt: updated.createdAt.toISOString(),
     user: {
       ...updated.user,
       createdAt: updated.user.createdAt.toISOString(),
@@ -292,7 +294,7 @@ export async function getProjectMembers(projectId: string, userId: string) {
 
   return members.map((m) => ({
     ...m,
-    joinedAt: m.joinedAt.toISOString(),
+    createdAt: m.createdAt.toISOString(),
     user: {
       ...m.user,
       createdAt: m.user.createdAt.toISOString(),
@@ -315,14 +317,14 @@ export async function requireProjectMember(
 
 async function requireOwnerOrLead(projectId: string, userId: string) {
   const member = await prisma.projectMember.findFirst({
-    where: { projectId, userId, role: { in: ['OWNER', 'TEAM_LEAD'] } },
+    where: { projectId, userId, role: { in: [ProjectRole.OWNER, ProjectRole.TEAM_LEAD] } },
   });
   if (!member) throw new ForbiddenError('Insufficient project permissions');
 }
 
 async function requireOwner(projectId: string, userId: string) {
   const member = await prisma.projectMember.findFirst({
-    where: { projectId, userId, role: 'OWNER' },
+    where: { projectId, userId, role: ProjectRole.OWNER },
   });
   if (!member) throw new ForbiddenError('Only the project owner can perform this action');
 }

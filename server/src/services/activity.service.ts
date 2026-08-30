@@ -1,11 +1,11 @@
-import { prisma } from '../config/database';
+import { prisma } from '../config/prisma';
 import { requireProjectMember } from './project.service';
 
 const USER_SELECT = {
   id: true,
   name: true,
   email: true,
-  avatar: true,
+  profileImage: true,
   bio: true,
   isOnline: true,
   createdAt: true,
@@ -13,7 +13,7 @@ const USER_SELECT = {
 } as const;
 
 interface CreateActivityInput {
-  type: string;
+  action: string;
   description: string;
   projectId: string;
   userId: string;
@@ -22,7 +22,7 @@ interface CreateActivityInput {
 export async function createActivity(input: CreateActivityInput) {
   return prisma.activity.create({
     data: {
-      type: input.type as 'PROJECT_CREATED' | 'PROJECT_UPDATED' | 'MEMBER_ADDED' | 'MEMBER_REMOVED' | 'TASK_CREATED' | 'TASK_UPDATED' | 'TASK_ASSIGNED' | 'TASK_STATUS_CHANGED' | 'TASK_COMPLETED' | 'TASK_DELETED' | 'COMMENT_ADDED' | 'FILE_UPLOADED',
+      action: input.action,
       description: input.description,
       projectId: input.projectId,
       userId: input.userId,

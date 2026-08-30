@@ -1,11 +1,12 @@
-import { prisma } from '../config/database';
+import { prisma } from '../config/prisma';
 import { ForbiddenError, NotFoundError, ConflictError } from '../utils/errors';
+import { TeamRole } from '@prisma/client';
 
 const USER_SELECT = {
   id: true,
   name: true,
   email: true,
-  avatar: true,
+  profileImage: true,
   bio: true,
   isOnline: true,
   createdAt: true,
@@ -22,7 +23,7 @@ export async function createTeam(
       description: data.description,
       ownerId: userId,
       members: {
-        create: { userId, role: 'OWNER' },
+        create: { userId, role: TeamRole.OWNER },
       },
     },
     include: {
@@ -66,7 +67,7 @@ export async function updateTeam(
   userId: string,
   data: { name?: string; description?: string },
 ) {
-  await requireOwnerOrLead(teamId, userId);
+  await requireOwner(teamId, userId);
 
   const team = await prisma.team.update({
     where: { id: teamId },
@@ -90,9 +91,9 @@ export async function deleteTeam(teamId: string, userId: string): Promise<void> 
 export async function inviteMember(
   teamId: string,
   inviterId: string,
-  data: { userId: string; role?: string },
+  data: { userId: string; role?: TeamRole },
 ) {
-  await requireOwnerOrLead(teamId, inviterId);
+  await requireOwner(teamId, inviterId);
 
   const existing = await prisma.teamMember.findFirst({
     where: { teamId, userId: data.userId },
@@ -103,14 +104,14 @@ export async function inviteMember(
     data: {
       teamId,
       userId: data.userId,
-      role: (data.role as 'OWNER' | 'TEAM_LEAD' | 'DEVELOPER' | 'VIEWER') ?? 'DEVELOPER',
+      role: data.role ?? TeamRole.MEMBER,
     },
     include: { user: { select: USER_SELECT } },
   });
 
   return {
     ...member,
-    joinedAt: member.joinedAt.toISOString(),
+    createdAt: member.createdAt.toISOString(),
     user: {
       ...member.user,
       createdAt: member.user.createdAt.toISOString(),
@@ -124,7 +125,7 @@ export async function removeMember(
   targetUserId: string,
   requesterId: string,
 ): Promise<void> {
-  await requireOwnerOrLead(teamId, requesterId);
+  await requireOwner(teamId, requesterId);
 
   const member = await prisma.teamMember.findFirst({
     where: { teamId, userId: targetUserId },
@@ -138,9 +139,9 @@ export async function updateMemberRole(
   teamId: string,
   targetUserId: string,
   requesterId: string,
-  role: string,
+  role: TeamRole,
 ) {
-  await requireOwnerOrLead(teamId, requesterId);
+  await requireOwner(teamId, requesterId);
 
   const member = await prisma.teamMember.findFirst({
     where: { teamId, userId: targetUserId },
@@ -149,13 +150,13 @@ export async function updateMemberRole(
 
   const updated = await prisma.teamMember.update({
     where: { id: member.id },
-    data: { role: role as 'OWNER' | 'TEAM_LEAD' | 'DEVELOPER' | 'VIEWER' },
+    data: { role },
     include: { user: { select: USER_SELECT } },
   });
 
   return {
     ...updated,
-    joinedAt: updated.joinedAt.toISOString(),
+    createdAt: updated.createdAt.toISOString(),
     user: {
       ...updated.user,
       createdAt: updated.user.createdAt.toISOString(),
@@ -179,9 +180,9 @@ export async function leaveTeam(teamId: string, userId: string): Promise<void> {
 
 // ─── Helpers ─────────────────────────────────────────────────
 
-async function requireOwnerOrLead(teamId: string, userId: string) {
+async function requireOwner(teamId: string, userId: string) {
   const member = await prisma.teamMember.findFirst({
-    where: { teamId, userId, role: { in: ['OWNER', 'TEAM_LEAD'] } },
+    where: { teamId, userId, role: TeamRole.OWNER },
   });
   if (!member) throw new ForbiddenError('Insufficient team permissions');
 }
@@ -193,12 +194,12 @@ function serializeTeam(team: any) {
     createdAt: team.createdAt.toISOString(),
     updatedAt: team.updatedAt.toISOString(),
     members: team.members?.map((m: {
-      joinedAt: Date;
+      createdAt: Date;
       user: { createdAt: Date; updatedAt: Date };
       [key: string]: unknown;
     }) => ({
       ...m,
-      joinedAt: m.joinedAt.toISOString(),
+      createdAt: m.createdAt.toISOString(),
       user: {
         ...m.user,
         createdAt: m.user.createdAt.toISOString(),

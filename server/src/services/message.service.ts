@@ -1,4 +1,4 @@
-import { prisma } from '../config/database';
+import { prisma } from '../config/prisma';
 import { ForbiddenError, NotFoundError } from '../utils/errors';
 import { requireProjectMember } from './project.service';
 
@@ -6,7 +6,7 @@ const USER_SELECT = {
   id: true,
   name: true,
   email: true,
-  avatar: true,
+  profileImage: true,
   bio: true,
   isOnline: true,
   createdAt: true,
@@ -26,7 +26,7 @@ export async function getProjectMessages(
 
   const messages = await prisma.message.findMany({
     where: { projectId },
-    include: { user: { select: USER_SELECT } },
+    include: { sender: { select: USER_SELECT } },
     orderBy: { createdAt: 'asc' },
     skip,
     take: limit,
@@ -34,12 +34,16 @@ export async function getProjectMessages(
 
   return {
     items: messages.map((m) => ({
-      ...m,
+      id: m.id,
+      content: m.content,
+      projectId: m.projectId,
+      senderId: m.senderId,
       createdAt: m.createdAt.toISOString(),
+      updatedAt: m.updatedAt.toISOString(),
       user: {
-        ...m.user,
-        createdAt: m.user.createdAt.toISOString(),
-        updatedAt: m.user.updatedAt.toISOString(),
+        ...m.sender,
+        createdAt: m.sender.createdAt.toISOString(),
+        updatedAt: m.sender.updatedAt.toISOString(),
       },
     })),
     total,
@@ -52,7 +56,7 @@ export async function getProjectMessages(
 export async function deleteMessage(messageId: string, userId: string): Promise<void> {
   const message = await prisma.message.findUnique({ where: { id: messageId } });
   if (!message) throw new NotFoundError('Message');
-  if (message.userId !== userId) {
+  if (message.senderId !== userId) {
     throw new ForbiddenError('You can only delete your own messages');
   }
 

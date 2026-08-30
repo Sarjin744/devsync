@@ -1,14 +1,15 @@
-import { prisma } from '../config/database';
+import { prisma } from '../config/prisma';
 import { ForbiddenError, NotFoundError } from '../utils/errors';
 import { requireProjectMember } from './project.service';
 import { createActivity } from './activity.service';
 import { createNotification } from './notification.service';
+import { TaskStatus, TaskPriority, ProjectRole } from '@prisma/client';
 
 const USER_SELECT = {
   id: true,
   name: true,
   email: true,
-  avatar: true,
+  profileImage: true,
   bio: true,
   isOnline: true,
   createdAt: true,
@@ -23,8 +24,8 @@ interface TaskFilters {
 export async function createTask(userId: string, data: {
   title: string;
   description?: string;
-  status?: string;
-  priority?: string;
+  status?: TaskStatus;
+  priority?: TaskPriority;
   projectId: string;
   assigneeId?: string;
   dueDate?: string;
@@ -35,8 +36,8 @@ export async function createTask(userId: string, data: {
     data: {
       title: data.title,
       description: data.description,
-      status: (data.status as 'TODO' | 'IN_PROGRESS' | 'IN_REVIEW' | 'DONE') ?? 'TODO',
-      priority: (data.priority as 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL') ?? 'MEDIUM',
+      status: data.status ?? TaskStatus.TODO,
+      priority: data.priority ?? TaskPriority.MEDIUM,
       projectId: data.projectId,
       creatorId: userId,
       assigneeId: data.assigneeId ?? null,
@@ -50,7 +51,7 @@ export async function createTask(userId: string, data: {
   });
 
   await createActivity({
-    type: 'TASK_CREATED',
+    action: 'TASK_CREATED',
     description: `Task "${task.title}" was created`,
     projectId: task.projectId,
     userId,
@@ -59,10 +60,9 @@ export async function createTask(userId: string, data: {
   if (task.assigneeId && task.assigneeId !== userId) {
     await createNotification({
       type: 'TASK_ASSIGNED',
+      title: 'New Task Assignment',
       message: `You were assigned to task "${task.title}"`,
       userId: task.assigneeId,
-      referenceId: task.id,
-      referenceType: 'TASK',
     });
   }
 
@@ -79,7 +79,7 @@ export async function getProjectTasks(
   const tasks = await prisma.task.findMany({
     where: {
       projectId,
-      ...(filters.status ? { status: filters.status as 'TODO' | 'IN_PROGRESS' | 'IN_REVIEW' | 'DONE' } : {}),
+      ...(filters.status ? { status: filters.status as TaskStatus } : {}),
       ...(filters.assigneeId ? { assigneeId: filters.assigneeId } : {}),
     },
     include: {
@@ -132,8 +132,8 @@ export async function updateTask(
   data: {
     title?: string;
     description?: string;
-    status?: string;
-    priority?: string;
+    status?: TaskStatus;
+    priority?: TaskPriority;
     assigneeId?: string | null;
     dueDate?: string | null;
   },
@@ -148,8 +148,8 @@ export async function updateTask(
     data: {
       title: data.title,
       description: data.description,
-      status: data.status as 'TODO' | 'IN_PROGRESS' | 'IN_REVIEW' | 'DONE' | undefined,
-      priority: data.priority as 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' | undefined,
+      status: data.status,
+      priority: data.priority,
       assigneeId: data.assigneeId,
       dueDate: data.dueDate ? new Date(data.dueDate) : data.dueDate === null ? null : undefined,
     },
@@ -161,7 +161,7 @@ export async function updateTask(
   });
 
   await createActivity({
-    type: 'TASK_UPDATED',
+    action: 'TASK_UPDATED',
     description: `Task "${updated.title}" was updated`,
     projectId: updated.projectId,
     userId,
@@ -177,7 +177,7 @@ export async function deleteTask(taskId: string, userId: string): Promise<void> 
   await requireOwnerOrLead(task.projectId, userId);
 
   await createActivity({
-    type: 'TASK_DELETED',
+    action: 'TASK_DELETED',
     description: `Task "${task.title}" was deleted`,
     projectId: task.projectId,
     userId,
@@ -209,15 +209,14 @@ export async function assignTask(
   if (assigneeId && assigneeId !== requesterId) {
     await createNotification({
       type: 'TASK_ASSIGNED',
+      title: 'Task Assigned',
       message: `You were assigned to task "${task.title}"`,
       userId: assigneeId,
-      referenceId: taskId,
-      referenceType: 'TASK',
     });
   }
 
   await createActivity({
-    type: 'TASK_ASSIGNED',
+    action: 'TASK_ASSIGNED',
     description: `Task "${task.title}" was ${assigneeId ? 'assigned' : 'unassigned'}`,
     projectId: task.projectId,
     userId: requesterId,
@@ -229,7 +228,7 @@ export async function assignTask(
 export async function updateTaskStatus(
   taskId: string,
   userId: string,
-  status: string,
+  status: TaskStatus,
 ) {
   const task = await prisma.task.findUnique({ where: { id: taskId } });
   if (!task) throw new NotFoundError('Task');
@@ -238,7 +237,7 @@ export async function updateTaskStatus(
 
   const updated = await prisma.task.update({
     where: { id: taskId },
-    data: { status: status as 'TODO' | 'IN_PROGRESS' | 'IN_REVIEW' | 'DONE' },
+    data: { status },
     include: {
       assignee: { select: USER_SELECT },
       creator: { select: USER_SELECT },
@@ -246,9 +245,9 @@ export async function updateTaskStatus(
     },
   });
 
-  const activityType = status === 'DONE' ? 'TASK_COMPLETED' : 'TASK_STATUS_CHANGED';
+  const actionName = status === TaskStatus.DONE ? 'TASK_COMPLETED' : 'TASK_STATUS_CHANGED';
   await createActivity({
-    type: activityType,
+    action: actionName,
     description: `Task "${task.title}" status changed to ${status.replace('_', ' ')}`,
     projectId: task.projectId,
     userId,
@@ -257,10 +256,9 @@ export async function updateTaskStatus(
   if (task.creatorId !== userId) {
     await createNotification({
       type: 'TASK_STATUS_CHANGED',
+      title: 'Task Status Updated',
       message: `Task "${task.title}" was moved to ${status.replace('_', ' ')}`,
       userId: task.creatorId,
-      referenceId: taskId,
-      referenceType: 'TASK',
     });
   }
 
@@ -280,7 +278,7 @@ async function requireProjectMemberOrCreator(
 
 async function requireOwnerOrLead(projectId: string, userId: string) {
   const member = await prisma.projectMember.findFirst({
-    where: { projectId, userId, role: { in: ['OWNER', 'TEAM_LEAD'] } },
+    where: { projectId, userId, role: { in: [ProjectRole.OWNER, ProjectRole.TEAM_LEAD] } },
   });
   if (!member) throw new ForbiddenError('Insufficient permissions for this action');
 }

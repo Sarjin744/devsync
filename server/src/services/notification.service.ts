@@ -1,24 +1,23 @@
-import { prisma } from '../config/database';
+import { prisma } from '../config/prisma';
 import { ForbiddenError, NotFoundError } from '../utils/errors';
 import { io } from '../sockets';
 import { sendNotificationToUser } from '../sockets/notification.handler';
+import { NotificationType } from '@prisma/client';
 
 interface CreateNotificationInput {
-  type: string;
+  type: NotificationType | string;
+  title?: string;
   message: string;
   userId: string;
-  referenceId?: string;
-  referenceType?: string;
 }
 
 export async function createNotification(input: CreateNotificationInput) {
   const notification = await prisma.notification.create({
     data: {
-      type: input.type as 'TASK_ASSIGNED' | 'TASK_STATUS_CHANGED' | 'TASK_COMMENTED' | 'PROJECT_MEMBER_ADDED' | 'PROJECT_MEMBER_REMOVED' | 'NEW_MESSAGE' | 'TEAM_MEMBER_JOINED' | 'MENTION',
+      type: input.type as NotificationType,
+      title: input.title ?? '',
       message: input.message,
       userId: input.userId,
-      referenceId: input.referenceId ?? null,
-      referenceType: input.referenceType ?? null,
     },
   });
 

@@ -120,7 +120,7 @@ export default function DashboardPage() {
               stats.recentActivity.slice(0, 8).map((activity) => (
                 <div key={activity.id} className="px-5 py-3.5 flex items-start gap-3">
                   <div className="w-7 h-7 rounded-full bg-indigo-100 flex items-center justify-center text-xs font-semibold text-indigo-700 flex-shrink-0 mt-0.5">
-                    {getInitials(activity.user.name)}
+                    {activity.user?.name ? getInitials(activity.user.name) : 'DS'}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-gray-700 leading-snug">{activity.description}</p>

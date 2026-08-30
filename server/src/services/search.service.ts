@@ -1,4 +1,4 @@
-import { prisma } from '../config/database';
+import { prisma } from '../config/prisma';
 
 interface SearchOptions {
   type?: string;
@@ -10,7 +10,7 @@ const USER_SELECT = {
   id: true,
   name: true,
   email: true,
-  avatar: true,
+  profileImage: true,
   bio: true,
   isOnline: true,
   createdAt: true,
@@ -38,6 +38,7 @@ export async function search(userId: string, query: string, options: SearchOptio
         id: true,
         name: true,
         description: true,
+        teamId: true,
         status: true,
         ownerId: true,
         createdAt: true,

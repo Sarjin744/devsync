@@ -1,5 +1,5 @@
 import { Server as SocketServer, Socket } from 'socket.io';
-import { prisma } from '../config/database';
+import { prisma } from '../config/prisma';
 import { logger } from '../utils/logger';
 
 export function registerChatHandlers(io: SocketServer, socket: Socket): void {
@@ -30,20 +30,20 @@ export function registerChatHandlers(io: SocketServer, socket: Socket): void {
           return;
         }
 
-        // Persist message
+        // Persist message with sender relation
         const message = await prisma.message.create({
           data: {
             content: data.content.trim(),
             projectId: data.projectId,
-            userId: socket.userId,
+            senderId: socket.userId,
           },
           include: {
-            user: {
+            sender: {
               select: {
                 id: true,
                 name: true,
                 email: true,
-                avatar: true,
+                profileImage: true,
                 bio: true,
                 isOnline: true,
                 createdAt: true,
@@ -55,12 +55,16 @@ export function registerChatHandlers(io: SocketServer, socket: Socket): void {
 
         // Broadcast to project room
         io.to(`project:${data.projectId}`).emit('message:received', {
-          ...message,
+          id: message.id,
+          content: message.content,
+          projectId: message.projectId,
+          senderId: message.senderId,
           createdAt: message.createdAt.toISOString(),
+          updatedAt: message.updatedAt.toISOString(),
           user: {
-            ...message.user,
-            createdAt: message.user.createdAt.toISOString(),
-            updatedAt: message.user.updatedAt.toISOString(),
+            ...message.sender,
+            createdAt: message.sender.createdAt.toISOString(),
+            updatedAt: message.sender.updatedAt.toISOString(),
           },
         });
       } catch (error) {

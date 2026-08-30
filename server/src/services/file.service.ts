@@ -1,7 +1,8 @@
-import { prisma } from '../config/database';
+import { prisma } from '../config/prisma';
 import { ForbiddenError, NotFoundError } from '../utils/errors';
 import { requireProjectMember } from './project.service';
 import { createActivity } from './activity.service';
+import { ProjectRole } from '@prisma/client';
 import path from 'path';
 import fs from 'fs';
 
@@ -14,10 +15,10 @@ export async function uploadProjectFile(
 
   const fileRecord = await prisma.file.create({
     data: {
-      name: file.originalname,
-      url: `/uploads/${path.basename(file.path)}`,
+      fileName: file.originalname,
+      fileUrl: `/uploads/${path.basename(file.path)}`,
       mimeType: file.mimetype,
-      size: file.size,
+      fileSize: file.size,
       projectId,
       uploadedById: userId,
     },
@@ -27,7 +28,7 @@ export async function uploadProjectFile(
           id: true,
           name: true,
           email: true,
-          avatar: true,
+          profileImage: true,
           bio: true,
           isOnline: true,
           createdAt: true,
@@ -38,7 +39,7 @@ export async function uploadProjectFile(
   });
 
   await createActivity({
-    type: 'FILE_UPLOADED',
+    action: 'FILE_UPLOADED',
     description: `File "${file.originalname}" was uploaded`,
     projectId,
     userId,
@@ -66,7 +67,7 @@ export async function getProjectFiles(projectId: string, userId: string) {
           id: true,
           name: true,
           email: true,
-          avatar: true,
+          profileImage: true,
           bio: true,
           isOnline: true,
           createdAt: true,
@@ -94,8 +95,8 @@ export async function getFileDownload(fileId: string, userId: string) {
 
   await requireProjectMember(file.projectId, userId);
 
-  const filePath = path.join(process.cwd(), file.url);
-  return { filePath, fileName: file.name };
+  const filePath = path.join(process.cwd(), file.fileUrl);
+  return { filePath, fileName: file.fileName };
 }
 
 export async function deleteFile(fileId: string, userId: string): Promise<void> {
@@ -108,14 +109,14 @@ export async function deleteFile(fileId: string, userId: string): Promise<void> 
       where: {
         projectId: file.projectId,
         userId,
-        role: { in: ['OWNER', 'TEAM_LEAD'] },
+        role: { in: [ProjectRole.OWNER, ProjectRole.TEAM_LEAD] },
       },
     });
     if (!member) throw new ForbiddenError('You cannot delete this file');
   }
 
   // Delete from filesystem
-  const filePath = path.join(process.cwd(), file.url);
+  const filePath = path.join(process.cwd(), file.fileUrl);
   if (fs.existsSync(filePath)) {
     fs.unlinkSync(filePath);
   }

@@ -2,9 +2,13 @@
 // Enumerations
 // ============================================================
 
-export type UserRole = 'OWNER' | 'TEAM_LEAD' | 'DEVELOPER' | 'VIEWER';
+export type TeamRole = 'OWNER' | 'MEMBER';
 
-export type ProjectStatus = 'ACTIVE' | 'ARCHIVED' | 'DELETED';
+export type ProjectRole = 'OWNER' | 'TEAM_LEAD' | 'DEVELOPER' | 'VIEWER';
+
+export type UserRole = ProjectRole; // Alias for backward compatibility
+
+export type ProjectStatus = 'ACTIVE' | 'ARCHIVED';
 
 export type TaskStatus = 'TODO' | 'IN_PROGRESS' | 'IN_REVIEW' | 'DONE';
 
@@ -20,20 +24,6 @@ export type NotificationType =
   | 'TEAM_MEMBER_JOINED'
   | 'MENTION';
 
-export type ActivityType =
-  | 'PROJECT_CREATED'
-  | 'PROJECT_UPDATED'
-  | 'MEMBER_ADDED'
-  | 'MEMBER_REMOVED'
-  | 'TASK_CREATED'
-  | 'TASK_UPDATED'
-  | 'TASK_ASSIGNED'
-  | 'TASK_STATUS_CHANGED'
-  | 'TASK_COMPLETED'
-  | 'TASK_DELETED'
-  | 'COMMENT_ADDED'
-  | 'FILE_UPLOADED';
-
 // ============================================================
 // User types
 // ============================================================
@@ -42,7 +32,8 @@ export interface UserPublic {
   id: string;
   name: string;
   email: string;
-  avatar: string | null;
+  profileImage?: string | null;
+  avatar?: string | null;
   bio: string | null;
   isOnline: boolean;
   createdAt: string;
@@ -70,9 +61,9 @@ export interface TeamMember {
   id: string;
   userId: string;
   teamId: string;
-  role: UserRole;
+  role: TeamRole;
   user: UserPublic;
-  joinedAt: string;
+  createdAt: string;
 }
 
 // ============================================================
@@ -83,6 +74,7 @@ export interface ProjectSummary {
   id: string;
   name: string;
   description: string | null;
+  teamId: string | null;
   status: ProjectStatus;
   ownerId: string;
   createdAt: string;
@@ -104,9 +96,9 @@ export interface ProjectMember {
   id: string;
   userId: string;
   projectId: string;
-  role: UserRole;
+  role: ProjectRole;
   user: UserPublic;
-  joinedAt: string;
+  createdAt: string;
 }
 
 // ============================================================
@@ -148,6 +140,8 @@ export interface Comment {
   updatedAt: string;
 }
 
+export type TaskComment = Comment;
+
 // ============================================================
 // Message types
 // ============================================================
@@ -156,9 +150,11 @@ export interface Message {
   id: string;
   content: string;
   projectId: string;
-  userId: string;
-  user: UserPublic;
+  senderId: string;
+  sender?: UserPublic;
+  user?: UserPublic;
   createdAt: string;
+  updatedAt?: string;
 }
 
 // ============================================================
@@ -168,11 +164,10 @@ export interface Message {
 export interface Notification {
   id: string;
   type: NotificationType;
+  title?: string;
   message: string;
   isRead: boolean;
   userId: string;
-  referenceId: string | null;
-  referenceType: string | null;
   createdAt: string;
 }
 
@@ -182,7 +177,7 @@ export interface Notification {
 
 export interface Activity {
   id: string;
-  type: ActivityType;
+  action: string;
   description: string;
   projectId: string;
   userId: string;
@@ -196,13 +191,13 @@ export interface Activity {
 
 export interface ProjectFile {
   id: string;
-  name: string;
-  url: string;
+  fileName: string;
+  fileUrl: string;
   mimeType: string;
-  size: number;
+  fileSize: number;
   projectId: string;
   uploadedById: string;
-  uploadedBy: UserPublic;
+  uploadedBy?: UserPublic;
   createdAt: string;
 }
 
@@ -258,18 +253,11 @@ export interface DashboardStats {
 // ============================================================
 
 export interface SocketEvents {
-  // Chat
   'message:send': { projectId: string; content: string };
   'message:received': Message;
   'message:typing': { projectId: string; userId: string; isTyping: boolean };
-
-  // Notifications
   'notification:new': Notification;
-
-  // Presence
   'user:online': { userId: string };
   'user:offline': { userId: string };
-
-  // Task
   'task:updated': Task;
 }

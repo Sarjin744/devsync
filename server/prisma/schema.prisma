@@ -1,5 +1,5 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+// DevSync Database Schema (PostgreSQL + Prisma)
+// Learn more: https://pris.ly/d/prisma-schema
 
 generator client {
   provider = "prisma-client-js"
@@ -12,7 +12,12 @@ datasource db {
 
 // ─── Enums ───────────────────────────────────────────────────
 
-enum Role {
+enum TeamRole {
+  OWNER
+  MEMBER
+}
+
+enum ProjectRole {
   OWNER
   TEAM_LEAD
   DEVELOPER
@@ -22,7 +27,6 @@ enum Role {
 enum ProjectStatus {
   ACTIVE
   ARCHIVED
-  DELETED
 }
 
 enum TaskStatus {
@@ -50,21 +54,6 @@ enum NotificationType {
   MENTION
 }
 
-enum ActivityType {
-  PROJECT_CREATED
-  PROJECT_UPDATED
-  MEMBER_ADDED
-  MEMBER_REMOVED
-  TASK_CREATED
-  TASK_UPDATED
-  TASK_ASSIGNED
-  TASK_STATUS_CHANGED
-  TASK_COMPLETED
-  TASK_DELETED
-  COMMENT_ADDED
-  FILE_UPLOADED
-}
-
 // ─── Models ──────────────────────────────────────────────────
 
 model User {
@@ -72,40 +61,27 @@ model User {
   name         String
   email        String   @unique
   passwordHash String
-  avatar       String?
+  profileImage String?
   bio          String?
   isOnline     Boolean  @default(false)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  // Relations
-  ownedTeams      Team[]           @relation("TeamOwner")
-  teamMemberships TeamMember[]
+  // Relationships
+  ownedTeams         Team[]          @relation("TeamOwner")
+  teamMemberships    TeamMember[]
+  ownedProjects      Project[]       @relation("ProjectOwner")
   projectMemberships ProjectMember[]
-  ownedProjects   Project[]        @relation("ProjectOwner")
-  createdTasks    Task[]           @relation("TaskCreator")
-  assignedTasks   Task[]           @relation("TaskAssignee")
-  comments        Comment[]
-  messages        Message[]
-  notifications   Notification[]
-  activities      Activity[]
-  refreshTokens   RefreshToken[]
-  uploadedFiles   File[]
+  createdTasks       Task[]          @relation("TaskCreator")
+  assignedTasks      Task[]          @relation("TaskAssignee")
+  taskComments       TaskComment[]
+  sentMessages       Message[]       @relation("MessageSender")
+  notifications      Notification[]
+  uploadedFiles      File[]          @relation("FileUploader")
+  activities         Activity[]      @relation("UserActivity")
+  refreshTokens      RefreshToken[]
 
   @@index([email])
-}
-
-model RefreshToken {
-  id        String   @id @default(uuid())
-  token     String   @unique
-  userId    String
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([token])
 }
 
 model Team {
@@ -116,23 +92,26 @@ model Team {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  owner   User         @relation("TeamOwner", fields: [ownerId], references: [id])
-  members TeamMember[]
+  // Relationships
+  owner    User         @relation("TeamOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members  TeamMember[]
+  projects Project[]
 
   @@index([ownerId])
 }
 
 model TeamMember {
-  id       String   @id @default(uuid())
-  userId   String
-  teamId   String
-  role     Role     @default(DEVELOPER)
-  joinedAt DateTime @default(now())
+  id        String   @id @default(uuid())
+  teamId    String
+  userId    String
+  role      TeamRole @default(MEMBER)
+  createdAt DateTime @default(now())
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Relationships
   team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, teamId])
+  @@unique([teamId, userId])
   @@index([teamId])
   @@index([userId])
 }
@@ -141,33 +120,38 @@ model Project {
   id          String        @id @default(uuid())
   name        String
   description String?
-  status      ProjectStatus @default(ACTIVE)
+  teamId      String?
   ownerId     String
+  status      ProjectStatus @default(ACTIVE)
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
-  owner    User            @relation("ProjectOwner", fields: [ownerId], references: [id])
-  members  ProjectMember[]
-  tasks    Task[]
-  messages Message[]
-  files    File[]
-  activity Activity[]
+  // Relationships
+  team       Team?           @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  owner      User            @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members    ProjectMember[]
+  tasks      Task[]
+  messages   Message[]
+  files      File[]
+  activities Activity[]
 
   @@index([ownerId])
+  @@index([teamId])
   @@index([status])
 }
 
 model ProjectMember {
-  id        String   @id @default(uuid())
-  userId    String
+  id        String      @id @default(uuid())
   projectId String
-  role      Role     @default(DEVELOPER)
-  joinedAt  DateTime @default(now())
+  userId    String
+  role      ProjectRole @default(DEVELOPER)
+  createdAt DateTime    @default(now())
 
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Relationships
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, projectId])
+  @@unique([projectId, userId])
   @@index([projectId])
   @@index([userId])
 }
@@ -185,25 +169,27 @@ model Task {
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
-  project  Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  creator  User      @relation("TaskCreator", fields: [creatorId], references: [id])
-  assignee User?     @relation("TaskAssignee", fields: [assigneeId], references: [id])
-  comments Comment[]
+  // Relationships
+  project  Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  creator  User          @relation("TaskCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  assignee User?         @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  comments TaskComment[]
 
   @@index([projectId])
   @@index([assigneeId])
   @@index([status])
-  @@index([priority])
+  @@index([dueDate])
 }
 
-model Comment {
+model TaskComment {
   id        String   @id @default(uuid())
-  content   String
   taskId    String
   userId    String
+  content   String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // Relationships
   task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -213,29 +199,31 @@ model Comment {
 
 model Message {
   id        String   @id @default(uuid())
-  content   String
   projectId String
-  userId    String
+  senderId  String
+  content   String
   createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
 
+  // Relationships
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sender  User    @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
 
   @@index([projectId])
-  @@index([userId])
+  @@index([senderId])
   @@index([createdAt])
 }
 
 model Notification {
-  id            String           @id @default(uuid())
-  type          NotificationType
-  message       String
-  isRead        Boolean          @default(false)
-  userId        String
-  referenceId   String?
-  referenceType String?
-  createdAt     DateTime         @default(now())
+  id        String           @id @default(uuid())
+  userId    String
+  type      NotificationType
+  title     String           @default("")
+  message   String
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
 
+  // Relationships
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
@@ -243,35 +231,52 @@ model Notification {
   @@index([createdAt])
 }
 
+model File {
+  id           String   @id @default(uuid())
+  projectId    String
+  uploadedById String
+  fileName     String
+  fileUrl      String
+  mimeType     String
+  fileSize     Int
+  createdAt    DateTime @default(now())
+
+  // Relationships
+  project    Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  uploadedBy User    @relation("FileUploader", fields: [uploadedById], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([uploadedById])
+}
+
 model Activity {
-  id          String       @id @default(uuid())
-  type        ActivityType
-  description String
+  id          String   @id @default(uuid())
   projectId   String
   userId      String
-  createdAt   DateTime     @default(now())
+  action      String
+  description String
+  createdAt   DateTime @default(now())
 
+  // Relationships
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user    User    @relation("UserActivity", fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([projectId])
   @@index([userId])
   @@index([createdAt])
 }
 
-model File {
-  id           String   @id @default(uuid())
-  name         String
-  url          String
-  mimeType     String
-  size         Int
-  projectId    String
-  uploadedById String
-  createdAt    DateTime @default(now())
+model RefreshToken {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+  revokedAt DateTime?
 
-  project    Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  uploadedBy User    @relation(fields: [uploadedById], references: [id])
+  // Relationships
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([projectId])
-  @@index([uploadedById])
+  @@index([userId])
+  @@index([tokenHash])
 }

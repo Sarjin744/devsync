@@ -204,29 +204,72 @@ npm start
 
 ---
 
-## 🗄 Database
+## 🗄 Database Setup & Prisma ORM
 
-DevSync uses PostgreSQL with Prisma ORM.
+DevSync uses **PostgreSQL** with **Prisma ORM** for type-safe relational data persistence.
 
-### Key models
+### 1. Database Provisioning & Connection
 
-- **User** — Authentication, profile, presence
-- **Team / TeamMember** — Team management with roles
-- **Project / ProjectMember** — Project with RBAC
-- **Task** — Kanban tasks with priorities
-- **Comment** — Task comments
-- **Message** — Project chat
-- **Notification** — Real-time notifications
-- **Activity** — Project activity log
-- **File** — File metadata
-- **RefreshToken** — JWT refresh token storage
+1. Install PostgreSQL locally (or use a hosted PostgreSQL service such as Render PostgreSQL, Supabase, Neon, or Railway).
+2. Create an empty database named `devsync`.
+3. Configure the `DATABASE_URL` in `server/.env`:
+   ```env
+   DATABASE_URL="postgresql://USER:PASSWORD@HOST:PORT/devsync"
+   ```
 
-### Migrations
+### 2. Migrations & Client Generation
 
 ```bash
 cd server
-npx prisma migrate dev --name <migration-name>
-npx prisma migrate deploy  # production
+
+# Apply migrations
+npx prisma migrate deploy
+
+# (Optional) Generate fresh TypeScript client
+npx prisma generate
+```
+
+### 3. Database Seed
+
+Populate the database with safe development mock data (teams, projects, members, tasks, comments, activity, and messages):
+
+```bash
+cd server
+npm run db:seed
+```
+
+#### Safe Development Credentials (Fake / Mock Data)
+
+| Role | Email | Password |
+|------|-------|----------|
+| **Project Owner** | `alex.dev@devsync.local` | `Password123!` |
+| **Team Lead** | `sarah.lead@devsync.local` | `Password123!` |
+| **Developer** | `marcus.eng@devsync.local` | `Password123!` |
+
+*(Note: Passwords in seed are securely hashed with bcrypt. Never use real passwords in development seed data.)*
+
+### 4. Database Models
+
+- **User**: Name, email (`@unique`), passwordHash, profileImage, bio, isOnline, timestamps.
+- **Team**: Name, description, owner (`User`), members (`TeamMember`), projects.
+- **TeamMember**: `teamId`, `userId`, role (`OWNER` \| `MEMBER`), `@@unique([teamId, userId])`.
+- **Project**: Name, description, status (`ACTIVE` \| `ARCHIVED`), owner, team, members, tasks, messages, files, activity.
+- **ProjectMember**: `projectId`, `userId`, role (`OWNER` \| `TEAM_LEAD` \| `DEVELOPER` \| `VIEWER`), `@@unique([projectId, userId])`.
+- **Task**: Title, description, status (`TODO` \| `IN_PROGRESS` \| `IN_REVIEW` \| `DONE`), priority (`LOW` \| `MEDIUM` \| `HIGH` \| `CRITICAL`), assignee, creator, comments, dueDate.
+- **TaskComment**: Task reference, author reference, content, timestamps.
+- **Message**: Project chat messages with sender reference and timestamps.
+- **Notification**: User targeted notifications with type, title, message, read state.
+- **File**: File metadata records (fileName, fileUrl, mimeType, fileSize, uploader).
+- **Activity**: Chronological project action audit logs (action, description, user, project).
+- **RefreshToken**: Token hash, user reference, expiresAt, revokedAt for auth rotation.
+
+### 5. Prisma Studio
+
+Inspect and manage your database visually:
+
+```bash
+cd server
+npm run db:studio
 ```
 
 ---
