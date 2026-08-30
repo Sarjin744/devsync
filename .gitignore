@@ -74,3 +74,4 @@ uploads/
 # Misc
 *.map
 .turbo/
+push.bat

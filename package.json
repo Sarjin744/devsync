@@ -9,13 +9,15 @@
     "server"
   ],
   "scripts": {
-    "dev:server": "pnpm --filter server dev",
-    "dev:web": "pnpm --filter web dev",
-    "dev:mobile": "pnpm --filter mobile start",
-    "build:server": "pnpm --filter server build",
-    "build:web": "pnpm --filter web build",
-    "lint": "pnpm --recursive lint",
-    "typecheck": "pnpm --recursive typecheck"
+    "dev:server": "npm --workspace=server run dev",
+    "dev:web": "npm --workspace=web run dev",
+    "dev:mobile": "npm --workspace=mobile run start",
+    "build:server": "npm --workspace=server run build",
+    "build:web": "npm --workspace=web run build",
+    "start:server": "npm --workspace=server run start",
+    "start:web": "npm --workspace=web run start",
+    "lint": "npm --workspace=server run lint && npm --workspace=web run lint",
+    "typecheck": "npm --workspace=server run typecheck && npm --workspace=web run typecheck"
   },
   "devDependencies": {
     "typescript": "^5.4.5"

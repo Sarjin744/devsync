@@ -6,8 +6,8 @@ services:
   - type: web
     name: devsync-api
     runtime: node
-    buildCommand: npm install && npx prisma generate --schema=server/prisma/schema.prisma && npm --workspace=server run build
-    startCommand: npx prisma migrate deploy --schema=server/prisma/schema.prisma && node server/dist/index.js
+    buildCommand: npm install && npx prisma generate --schema=server/prisma/schema.prisma && npm run build:server
+    startCommand: npx prisma migrate deploy --schema=server/prisma/schema.prisma && npm run start:server
     plan: free
     healthCheckPath: /health
     envVars:
@@ -34,8 +34,8 @@ services:
   - type: web
     name: devsync-web
     runtime: node
-    buildCommand: npm install && npm --workspace=web run build
-    startCommand: npm --workspace=web run start
+    buildCommand: npm install && npm run build:web
+    startCommand: npm run start:web
     plan: free
     envVars:
       - key: NEXT_PUBLIC_API_URL
