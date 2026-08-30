@@ -29,13 +29,27 @@ export default function RegisterPage() {
       toast.error('Password must be at least 8 characters');
       return;
     }
+    if (!/[A-Z]/.test(password)) {
+      toast.error('Password must contain at least one uppercase letter (A-Z)');
+      return;
+    }
+    if (!/[0-9]/.test(password)) {
+      toast.error('Password must contain at least one number (0-9)');
+      return;
+    }
 
     setIsLoading(true);
     try {
       await register(name.trim(), email.trim().toLowerCase(), password);
+      toast.success('Account created successfully!');
       router.push('/dashboard');
-    } catch (error) {
-      toast.error((error as { response?: { data?: { error?: string } } }).response?.data?.error ?? 'Registration failed');
+    } catch (error: any) {
+      const errorMsg =
+        error?.response?.data?.error ||
+        error?.response?.data?.message ||
+        error?.message ||
+        'Registration failed. Please check your database connection.';
+      toast.error(errorMsg);
     } finally {
       setIsLoading(false);
     }
@@ -44,8 +58,20 @@ export default function RegisterPage() {
   const fields = [
     { label: 'Full Name', value: name, setter: setName, type: 'text', placeholder: 'John Doe' },
     { label: 'Email', value: email, setter: setEmail, type: 'email', placeholder: 'your@email.com' },
-    { label: 'Password', value: password, setter: setPassword, type: 'password', placeholder: '••••••••' },
-    { label: 'Confirm Password', value: confirmPassword, setter: setConfirmPassword, type: 'password', placeholder: '••••••••' },
+    {
+      label: 'Password',
+      value: password,
+      setter: setPassword,
+      type: 'password',
+      placeholder: 'Min 8 chars, 1 uppercase, 1 number (e.g. Pass123!)',
+    },
+    {
+      label: 'Confirm Password',
+      value: confirmPassword,
+      setter: setConfirmPassword,
+      type: 'password',
+      placeholder: '••••••••',
+    },
   ];
 
   return (
@@ -72,16 +98,20 @@ export default function RegisterPage() {
                   value={value}
                   onChange={(e) => setter(e.target.value)}
                   placeholder={placeholder}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition text-sm"
                   required
                 />
               </div>
             ))}
 
+            <p className="text-xs text-gray-400">
+              Password requirements: Minimum 8 characters, at least 1 uppercase letter and 1 number.
+            </p>
+
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white font-semibold py-3 px-4 rounded-xl transition duration-200 flex items-center justify-center gap-2"
+              className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white font-semibold py-3 px-4 rounded-xl transition duration-200 flex items-center justify-center gap-2 cursor-pointer"
             >
               {isLoading ? 'Creating account...' : 'Create Account'}
             </button>
