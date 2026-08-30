@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// In production, point to your Render URL
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:5000';
+// Connects to live Render backend by default for real-time worldwide access
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://devsync-api.onrender.com';
 
 const STORAGE_KEYS = {
   ACCESS_TOKEN: '@devsync/access_token',
