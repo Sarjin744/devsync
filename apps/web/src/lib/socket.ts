@@ -1,17 +1,19 @@
 import { io, Socket } from 'socket.io-client';
+import { getApiBaseUrl } from './api';
 
 let socket: Socket | null = null;
 
 export function getSocket(token?: string): Socket {
-  const socketUrl =
-    process.env.NEXT_PUBLIC_SOCKET_URL ||
-    process.env.NEXT_PUBLIC_API_URL ||
-    'http://localhost:5000';
+  const socketUrl = getApiBaseUrl();
 
   if (!socket) {
     socket = io(socketUrl, {
       auth: {
-        token: token || (typeof window !== 'undefined' ? localStorage.getItem('token') : ''),
+        token:
+          token ||
+          (typeof window !== 'undefined'
+            ? localStorage.getItem('devsync_access_token') || localStorage.getItem('token')
+            : ''),
       },
       autoConnect: false,
       transports: ['websocket', 'polling'],

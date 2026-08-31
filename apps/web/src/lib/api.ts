@@ -1,15 +1,33 @@
 import axios from 'axios';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:5000';
+export function getApiBaseUrl(): string {
+  // 1. If explicit production environment variable is provided, use it
+  if (process.env.NEXT_PUBLIC_API_URL && !process.env.NEXT_PUBLIC_API_URL.includes('localhost')) {
+    return process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, '');
+  }
+
+  // 2. If running on a public web domain (Render or mobile/desktop browser)
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
+      return 'https://devsync-api.onrender.com';
+    }
+  }
+
+  // 3. Localhost fallback for local development
+  return (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000').replace(/\/$/, '');
+}
 
 export const apiClient = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: getApiBaseUrl(),
   headers: { 'Content-Type': 'application/json' },
   withCredentials: false,
 });
 
-// Attach access token to every request
+// Update baseURL dynamically per request if needed
 apiClient.interceptors.request.use((config) => {
+  config.baseURL = getApiBaseUrl();
+
   if (typeof window !== 'undefined') {
     const token = localStorage.getItem('devsync_access_token');
     if (token) {
@@ -31,7 +49,8 @@ apiClient.interceptors.response.use(
         const refreshToken = localStorage.getItem('devsync_refresh_token');
         if (!refreshToken) throw new Error('No refresh token');
 
-        const response = await axios.post(`${API_BASE_URL}/api/auth/refresh`, {
+        const baseUrl = getApiBaseUrl();
+        const response = await axios.post(`${baseUrl}/api/auth/refresh`, {
           refreshToken,
         });
 
