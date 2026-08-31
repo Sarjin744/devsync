@@ -6,11 +6,11 @@ export function getApiBaseUrl(): string {
     return process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, '');
   }
 
-  // 2. If running on a public web domain (Render or mobile/desktop browser)
+  // 2. If running on a public web domain (Render or any browser)
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname;
     if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
-      return 'https://devsync-api.onrender.com';
+      return 'https://devsync-api-nxq1.onrender.com';
     }
   }
 
