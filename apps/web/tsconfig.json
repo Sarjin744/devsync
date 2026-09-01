@@ -20,7 +20,7 @@
     ],
     "paths": {
       "@/*": ["./src/*"],
-      "@devsync/shared": ["../../packages/shared/src/index.ts"]
+      "@devsync/shared": ["./src/types/shared.ts"]
     }
   },
   "include": [
