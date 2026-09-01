@@ -114,6 +114,17 @@ app.use(requestLogger);
 // ─── Static Files ────────────────────────────────────────────
 app.use('/uploads', express.static('uploads'));
 
+// ─── Root Info Endpoint ──────────────────────────────────────
+app.get('/', (_req: Request, res: Response) => {
+  res.status(200).json({
+    name: 'DevSync Backend API',
+    status: 'online',
+    version: '1.0.0',
+    documentation: '/api/docs',
+    health: '/health',
+  });
+});
+
 // ─── Health Check Endpoint (Render & Monitoring) ─────────────
 app.get(['/health', '/api/health'], async (_req: Request, res: Response) => {
   let dbStatus = 'connected';
