@@ -7,7 +7,7 @@ services:
     name: devsync-api
     runtime: node
     rootDir: server
-    buildCommand: npm install && npx prisma generate && npm run build
+    buildCommand: npm install --include=dev && npx prisma generate && npm run build
     startCommand: npx prisma migrate deploy && npm run start
     plan: free
     healthCheckPath: /health
@@ -36,7 +36,7 @@ services:
     name: devsync-web
     runtime: node
     rootDir: apps/web
-    buildCommand: npm install && npm run build
+    buildCommand: npm install --include=dev && npm run build
     startCommand: npm run start
     plan: free
     envVars:
