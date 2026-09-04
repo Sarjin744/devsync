@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api, STORAGE_KEYS } from '../services/api';
+import { disconnectMobileSocket } from '../services/socket';
 import type { UserPublic } from '@devsync/shared';
 
 interface AuthContextType {
@@ -100,6 +101,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch {
       // Ignore logout errors
     }
+    disconnectMobileSocket();
     await clearStorage();
     setUser(null);
   };

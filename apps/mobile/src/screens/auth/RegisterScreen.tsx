@@ -92,7 +92,7 @@ export default function RegisterScreen({ navigation }: { navigation: { navigate:
                 placeholderTextColor="#9ca3af"
                 value={value}
                 onChangeText={setter}
-                autoCapitalize="none"
+                autoCapitalize={label === 'Full Name' ? 'words' : 'none'}
                 keyboardType={type}
                 secureTextEntry={secure}
               />

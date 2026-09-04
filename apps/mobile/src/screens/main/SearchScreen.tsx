@@ -37,11 +37,7 @@ export default function SearchScreen({ navigation }: { navigation?: any }) {
   const [selectedType, setSelectedType] = useState('all');
   const [results, setResults] = useState<SearchResultItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [recentSearches, setRecentSearches] = useState<string[]>([
-    'authentication',
-    'project tracker',
-    'socket.io',
-  ]);
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
 
   // Debounce user input
   useEffect(() => {
@@ -139,9 +135,9 @@ export default function SearchScreen({ navigation }: { navigation?: any }) {
         <View style={styles.recentSection}>
           <Text style={styles.recentTitle}>Recent Searches</Text>
           <View style={styles.recentTags}>
-            {recentSearches.map((term, i) => (
+            {recentSearches.map((term) => (
               <TouchableOpacity
-                key={i}
+                key={term}
                 style={styles.recentTag}
                 onPress={() => setQuery(term)}
               >

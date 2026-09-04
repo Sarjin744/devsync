@@ -55,8 +55,8 @@ export default function ProjectsScreen({ navigation }: { navigation?: any }) {
       ]);
       setProjects(projectsData || []);
       setTeams(teamsData || []);
-      if (teamsData && teamsData.length > 0 && !selectedTeamId) {
-        setSelectedTeamId(teamsData[0].id);
+      if (teamsData && teamsData.length > 0) {
+        setSelectedTeamId((prev) => prev || teamsData[0].id);
       }
     } catch {
       Alert.alert('Error', 'Failed to load projects');
@@ -64,7 +64,7 @@ export default function ProjectsScreen({ navigation }: { navigation?: any }) {
       setIsLoading(false);
       setRefreshing(false);
     }
-  }, [statusFilter, selectedTeamId]);
+  }, [statusFilter]);
 
   useEffect(() => {
     loadData();
@@ -195,7 +195,12 @@ export default function ProjectsScreen({ navigation }: { navigation?: any }) {
       />
 
       {/* Create Project Modal */}
-      <Modal visible={showModal} transparent animationType="slide">
+      <Modal
+        visible={showModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowModal(false)}
+      >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Create New Project</Text>

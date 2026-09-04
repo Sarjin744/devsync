@@ -189,9 +189,9 @@ function SearchPageContent() {
             </button>
           </div>
           <div className="flex flex-wrap gap-2">
-            {recentSearches.map((term, idx) => (
+            {recentSearches.map((term) => (
               <button
-                key={idx}
+                key={term}
                 onClick={() => {
                   setInputQuery(term);
                   setDebouncedQuery(term);

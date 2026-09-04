@@ -4,6 +4,10 @@ import bcrypt from 'bcryptjs';
 const prisma = new PrismaClient();
 
 async function main() {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('Dangerous action: Seeding is forbidden in production environment.');
+  }
+
   console.info('🌱 Starting DevSync database seed...');
 
   // Clean existing data in dependency order

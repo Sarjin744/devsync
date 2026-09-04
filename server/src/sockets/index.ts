@@ -40,8 +40,7 @@ export function initializeSocket(server: HttpServer): SocketServer {
     try {
       const authHeader =
         socket.handshake.auth?.token ||
-        socket.handshake.headers?.authorization ||
-        socket.handshake.query?.token;
+        socket.handshake.headers?.authorization;
 
       if (!authHeader || typeof authHeader !== 'string') {
         return next(new Error('Authentication required'));

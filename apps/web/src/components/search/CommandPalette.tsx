@@ -246,9 +246,9 @@ export function CommandPalette({
                 </button>
               </div>
               <div className="flex flex-wrap gap-2">
-                {recentSearches.map((term, i) => (
+                {recentSearches.map((term) => (
                   <div
-                    key={i}
+                    key={term}
                     onClick={() => {
                       setQuery(term);
                       setDebouncedQuery(term);

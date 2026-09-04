@@ -72,10 +72,16 @@ async function request<T>(
     }
   }
 
-  const data = await response.json();
+  let data: any = {};
+  try {
+    data = await response.json();
+  } catch {
+    // If response body is not JSON (e.g. 502 Bad Gateway, Cloudflare HTML, network error page)
+    data = { error: `Server error (status ${response.status})` };
+  }
 
   if (!response.ok) {
-    throw new Error(data.error ?? data.message ?? 'An error occurred');
+    throw new Error(data.error ?? data.message ?? `Request failed with status ${response.status}`);
   }
 
   return data.data as T;

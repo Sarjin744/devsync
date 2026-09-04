@@ -9,7 +9,6 @@ export const ALLOWED_MIME_TYPES = [
   'image/png',
   'image/webp',
   'image/gif',
-  'image/svg+xml',
   // Documents
   'application/pdf',
   'application/msword',
@@ -20,12 +19,11 @@ export const ALLOWED_MIME_TYPES = [
   'application/vnd.openxmlformats-officedocument.presentationml.presentation',
   'text/plain',
   'text/csv',
-  // Archives & Code
+  // Archives
   'application/zip',
   'application/x-zip-compressed',
   'application/x-tar',
   'application/gzip',
-  'application/json',
 ];
 
 // Memory storage for stateless cloud uploads

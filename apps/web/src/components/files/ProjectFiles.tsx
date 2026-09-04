@@ -101,7 +101,10 @@ export function ProjectFiles({
   // 2. Real-Time Socket.IO event listeners
   useEffect(() => {
     if (!user) return;
-    const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+    const token =
+      typeof window !== 'undefined'
+        ? localStorage.getItem('devsync_access_token') || ''
+        : '';
     const socket = getSocket(token);
 
     if (!socket.connected) socket.connect();

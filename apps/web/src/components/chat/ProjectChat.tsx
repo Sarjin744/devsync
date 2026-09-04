@@ -102,7 +102,10 @@ export function ProjectChat({
 
   // 2. Connect to Socket.IO and register listeners
   useEffect(() => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+    const token =
+      typeof window !== 'undefined'
+        ? localStorage.getItem('devsync_access_token') || ''
+        : '';
     const socket = getSocket(token);
 
     if (!socket.connected) {
@@ -184,6 +187,9 @@ export function ProjectChat({
     }
 
     return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
       socket.emit('project:leave', { projectId });
       socket.off('connect', onConnect);
       socket.off('disconnect', onDisconnect);
@@ -205,7 +211,10 @@ export function ProjectChat({
   // 4. Handle text change & typing indicator
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInputText(e.target.value);
-    const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+    const token =
+      typeof window !== 'undefined'
+        ? localStorage.getItem('devsync_access_token') || ''
+        : '';
     const socket = getSocket(token);
 
     if (socket && socket.connected) {
@@ -224,7 +233,10 @@ export function ProjectChat({
     const trimmed = inputText.trim();
     if (!trimmed) return;
 
-    const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+    const token =
+      typeof window !== 'undefined'
+        ? localStorage.getItem('devsync_access_token') || ''
+        : '';
     const socket = getSocket(token);
 
     if (!socket || !socket.connected) {

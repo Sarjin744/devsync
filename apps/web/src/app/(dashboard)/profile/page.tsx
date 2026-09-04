@@ -201,13 +201,22 @@ export default function ProfilePage() {
 
             {isEditing && (
               <button
-                onClick={() =>
+                onClick={() => {
+                  const trimmedUrl = profileImage.trim();
+                  if (
+                    trimmedUrl &&
+                    !trimmedUrl.startsWith('https://') &&
+                    !trimmedUrl.startsWith('http://')
+                  ) {
+                    toast.error('Profile image must start with https:// or http://');
+                    return;
+                  }
                   updateMutation.mutate({
-                    name,
-                    bio: bio || undefined,
-                    profileImage: profileImage || undefined,
-                  })
-                }
+                    name: name.trim(),
+                    bio: bio.trim(),
+                    profileImage: trimmedUrl || undefined,
+                  });
+                }}
                 disabled={updateMutation.isPending}
                 className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition disabled:opacity-60"
               >

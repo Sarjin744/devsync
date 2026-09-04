@@ -112,7 +112,7 @@ app.use(compression());
 app.use(requestLogger);
 
 // ─── Static Files ────────────────────────────────────────────
-app.use('/uploads', express.static('uploads'));
+// Note: File downloads are guarded via authenticated /api/files/:fileId/download endpoint
 
 // ─── Root Info Endpoint ──────────────────────────────────────
 app.get('/', (_req: Request, res: Response) => {

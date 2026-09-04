@@ -338,10 +338,14 @@ export default function TeamDetailsPage({
                   {/* Member can leave */}
                   {!isOwner && isSelf && (
                     <button
-                      onClick={() => {
+                      onClick={async () => {
                         if (confirm('Are you sure you want to leave this team?')) {
-                          removeMemberMutation.mutate(member.userId);
-                          router.push('/teams');
+                          try {
+                            await removeMemberMutation.mutateAsync(member.userId);
+                            router.push('/teams');
+                          } catch {
+                            // Handled by mutation onError
+                          }
                         }
                       }}
                       className="text-xs font-semibold text-red-600 hover:bg-red-50 px-3 py-1.5 rounded-xl border border-red-200 transition"

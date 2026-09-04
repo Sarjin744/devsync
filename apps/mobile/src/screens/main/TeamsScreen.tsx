@@ -134,7 +134,12 @@ export default function TeamsScreen() {
       />
 
       {/* Create Team Modal */}
-      <Modal visible={showModal} transparent animationType="slide">
+      <Modal
+        visible={showModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowModal(false)}
+      >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Create New Team</Text>

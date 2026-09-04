@@ -85,7 +85,10 @@ export default function DashboardPage() {
   // Real-Time Socket.IO update listener
   useEffect(() => {
     if (!user) return;
-    const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+    const token =
+      typeof window !== 'undefined'
+        ? localStorage.getItem('devsync_access_token') || ''
+        : '';
     const socket = getSocket(token);
 
     if (!socket.connected) socket.connect();

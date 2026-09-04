@@ -7,6 +7,7 @@ import { initializeSocket } from './sockets';
 import { logger } from './utils/logger';
 import { env } from './config/env';
 import { prisma } from './config/prisma';
+import { checkDueSoonTasks, checkOverdueTasks } from './jobs/task-reminders';
 
 const httpServer = createServer(app);
 
@@ -18,6 +19,19 @@ const HOST = '0.0.0.0';
 httpServer.listen(env.PORT, HOST, () => {
   logger.info(`DevSync server running on http://${HOST}:${env.PORT} [${env.NODE_ENV}]`);
   logger.info(`Health check active at http://${HOST}:${env.PORT}/health`);
+
+  // Run initial task reminders check and schedule recurring checks every 15 minutes
+  const runReminders = async () => {
+    try {
+      await checkDueSoonTasks();
+      await checkOverdueTasks();
+    } catch (err) {
+      logger.error('Error running task reminder jobs:', err);
+    }
+  };
+  runReminders();
+  const reminderInterval = setInterval(runReminders, 15 * 60 * 1000);
+  reminderInterval.unref();
 });
 
 // ─── Graceful Shutdown ───────────────────────────────────────
@@ -30,14 +44,21 @@ async function handleGracefulShutdown(signal: string) {
   logger.info(`Received ${signal}. Starting graceful shutdown...`);
 
   // 1. Stop accepting new HTTP requests
-  httpServer.close(() => {
-    logger.info('HTTP server closed.');
+  await new Promise<void>((resolve) => {
+    httpServer.close((err) => {
+      if (err) logger.error('Error closing HTTP server:', err);
+      else logger.info('HTTP server closed.');
+      resolve();
+    });
   });
 
   // 2. Disconnect Socket.IO clients
   if (io) {
-    io.close(() => {
-      logger.info('Socket.IO connections terminated.');
+    await new Promise<void>((resolve) => {
+      io.close(() => {
+        logger.info('Socket.IO connections terminated.');
+        resolve();
+      });
     });
   }
 

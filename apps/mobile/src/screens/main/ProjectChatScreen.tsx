@@ -143,6 +143,9 @@ export default function ProjectChatScreen({
     });
 
     return () => {
+      if (typingTimerRef.current) {
+        clearTimeout(typingTimerRef.current);
+      }
       if (activeSocket) {
         activeSocket.emit('project:leave', { projectId });
         activeSocket.off('connect');

@@ -96,7 +96,10 @@ export function NotificationBell() {
   // 6. Socket.IO Real-Time Notification listener
   useEffect(() => {
     if (!user) return;
-    const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+    const token =
+      typeof window !== 'undefined'
+        ? localStorage.getItem('devsync_access_token') || ''
+        : '';
     const socket = getSocket(token);
 
     if (!socket.connected) {

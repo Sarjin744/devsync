@@ -1,21 +1,23 @@
 import axios from 'axios';
 
 export function getApiBaseUrl(): string {
-  // 1. If explicit production environment variable is provided, use it
-  if (process.env.NEXT_PUBLIC_API_URL && !process.env.NEXT_PUBLIC_API_URL.includes('localhost')) {
+  // 1. If an environment variable is explicitly provided, always honor it
+  if (process.env.NEXT_PUBLIC_API_URL) {
     return process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, '');
   }
 
-  // 2. If running on a public web domain (Render or any browser)
+  // 2. In browser environment: if running on localhost/127.0.0.1, use port 5000; otherwise relative /api or default Render backend
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname;
-    if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
-      return 'https://devsync-api-nxq1.onrender.com';
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return 'http://localhost:5000';
     }
+    // For hosted environments without NEXT_PUBLIC_API_URL, use same-origin proxy or cloud backend
+    return window.location.origin;
   }
 
-  // 3. Localhost fallback for local development
-  return (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000').replace(/\/$/, '');
+  // 3. SSR fallback
+  return 'http://localhost:5000';
 }
 
 export const apiClient = axios.create({
